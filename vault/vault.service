@@ -1,0 +1,14 @@
+[Unit]
+Description=Vault server
+Requires=consul.service
+After=consul.service
+
+[Service]
+EnvironmentFile=-/etc/vault/vault.env
+Restart=on-failure
+ExecStart=/usr/bin/vault server -config=/etc/vault/server.hcl
+ExecReload=/bin/kill -HUP $MAINPID
+# Type=notify
+
+[Install]
+WantedBy=multi-user.target

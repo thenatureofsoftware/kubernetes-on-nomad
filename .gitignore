@@ -1,0 +1,6 @@
+.vagrant
+tmp
+kubernetes_bootstrap_config.env
+setup.env
+*.log
+kubernetes_config.tar.gz
