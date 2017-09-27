@@ -63,7 +63,7 @@ Vagrant.configure(2) do |config|
       node.vm.provision :shell, :inline => "mkdir -p /etc/nomad && mv /tmp/nomad.env /etc/nomad/nomad.env", :privileged => true
 
       node.vm.provision "shell", inline: <<-SHELL
-      sudo DEBIAN_FRONTEND=noninteractive /vagrant/setup.sh
+      sudo DEBIAN_FRONTEND=noninteractive /vagrant/nomad_setup.sh
       SHELL
     end
   end

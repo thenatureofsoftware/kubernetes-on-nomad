@@ -1,16 +1,3 @@
-# There can only be a single job definition per file. This job is named
-# "example" so it will create a job with the ID and Name "example".
-
-# The "job" stanza is the top-most configuration option in the job
-# specification. A job is a declarative specification of tasks that Nomad
-# should run. Jobs have a globally unique name, one or many task groups, which
-# are themselves collections of one or many tasks.
-#
-# For more information and examples on the "job" stanza, please see
-# the online documentation at:
-#
-#     https://www.nomadproject.io/docs/job-specification/job.html
-#
 job "etcd" {
   region = "global"
   datacenters = ["dc1"]
@@ -59,6 +46,7 @@ job "etcd" {
 ETCD_INITIAL_CLUSTER={{key "etcd/initial-cluster"}}
 ETCD_INITIAL_CLUSTER_1={{key "etcd/initial-cluster"}},{{ env "attr.unique.hostname" }}=http://127.0.0.1:2380
 ETCD_INITIAL_CLUSTER_TOKEN={{key "etcd/initial-cluster-token"}}
+NODE_STATUS={{printf "kubernetes/nodes/%s" (env "attr.unique.hostname") | key}}
 EOH
       }
       
@@ -90,7 +78,7 @@ EOH
         cpu    = 500 # 500 MHz
         memory = 256 # 256MB
         network {
-          mbits = 10
+          mbits = 100
           port "http" {
             static = "2379"
           }

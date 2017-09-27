@@ -60,6 +60,7 @@ bootstrap::reset_k8s () {
     log "Disable kubelet.service"
     systemctl disable kubelet
     common::rm_all_running_containers
+    rm -rf /var/lib/kubelet/*
 }
 
 bootstrap::generate_token () {
@@ -85,10 +86,17 @@ bootstrap::run_etcd () {
     log "Job submited"
 }
 
-bootstrap::run_kube-apiserver () {
-    log "Submitting job kube-apiserver to Nomad..."
+bootstrap::run_kubelet () {
+    log "Submitting job kubelet to Nomad..."
     BOOTSTRAP_K8S_CONFIG_BUNDLE=$(consul kv get kubernetes/config-bundle)
-    export BOOTSTRAP_K8S_CONFIG_BUNDLE=$(consul kv get kubernetes/config-bundle); cat ${JOBDIR}/kube-apiserver.nomad | envsubst '$BOOTSTRAP_K8S_CONFIG_BUNDLE' | nomad run -
+    export BOOTSTRAP_K8S_CONFIG_BUNDLE=$(consul kv get kubernetes/config-bundle); cat ${JOBDIR}/kubelet.nomad | envsubst '$BOOTSTRAP_K8S_CONFIG_BUNDLE' | nomad run -
+    log "Job submited"
+}
+
+bootstrap::run_kube-control-plane () {
+    log "Submitting job kube-control-plane to Nomad..."
+    BOOTSTRAP_K8S_CONFIG_BUNDLE=$(consul kv get kubernetes/config-bundle)
+    export BOOTSTRAP_K8S_CONFIG_BUNDLE=$(consul kv get kubernetes/config-bundle); cat ${JOBDIR}/kube-control-plane.nomad | envsubst '$BOOTSTRAP_K8S_CONFIG_BUNDLE' | nomad run -
     log "Job submited"
 }
 
@@ -98,23 +106,25 @@ source $SCRIPTDIR/consul_install.sh
 common::check_root
 bootstrap::env_file
 
-bootstrap::run_object_store
-log "Waiting for object store to start..."
-sleep 5
-log "Continuing ..."
+#bootstrap::run_object_store
+#log "Waiting for object store to start..."
+#sleep 5
+#log "Continuing ..."
 
 consul::put "etcd/servers" "$ETCD_SERVERS"
 consul::put "etcd/initial-cluster" "$ETCD_INITIAL_CLUSTER"
 consul::put "etcd/initial-cluster-token" "$ETCD_INITIAL_CLUSTER_TOKEN"
 
-bootstrap::create_k8s_config
-bootstrap::upload_bundle
-BOOTSTRAP_K8S_CONFIG_BUNDLE=$(sudo mc share download kube-store/resources/kubernetes_config.tar.gz|grep Share)
-consul::put "kubernetes/config-bundle" "${BOOTSTRAP_K8S_CONFIG_BUNDLE:7}"
+#bootstrap::create_k8s_config
+#source $BOOTSTRAP_K8S_CONFIG_FILE
+#bootstrap::upload_bundle
+#BOOTSTRAP_K8S_CONFIG_BUNDLE=$(sudo mc share download kube-store/resources/kubernetes_config.tar.gz|grep Share)
+#consul::put "kubernetes/config-bundle" "${BOOTSTRAP_K8S_CONFIG_BUNDLE:7}"
+#consul::put "kubernetes/join-token" "$KUBEADM_JOIN_TOKEN"
 
 bootstrap::run_etcd
-#bootstrap::run_kubelet_master
-bootstrap::run_kube-apiserver
+#bootstrap::run_kubelet
+#bootstrap::run_kube-control-plane
 
 source $BOOTSTRAP_K8S_CONFIG_FILE
 

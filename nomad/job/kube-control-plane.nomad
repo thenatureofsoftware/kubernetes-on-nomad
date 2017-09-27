@@ -108,9 +108,131 @@ EOH
       }
 
       service {
-        name = "kubernetes"
-        tags = ["global", "kubernetes"]
+        name = "kube-apiserver"
+        tags = ["global", "kubernetes", "apiserver"]
         port = "https"
+      }
+    }
+
+    task "kube-controller-manager" {
+      driver = "docker"
+
+      template {
+        destination = "local/kube-apiserver.env"
+        env         = true
+        data      = <<EOH
+ETCD_SERVERS={{key "etcd/servers"}}
+EOH
+      }
+
+      artifact {
+        source = "$BOOTSTRAP_K8S_CONFIG_BUNDLE"
+        destination = "local/kubernetes"
+      }
+      
+      config {
+        image = "gcr.io/google_containers/kube-controller-manager-amd64:v1.7.6"
+        network_mode = "host"
+
+        volumes = [
+          "/etc/ssl/certs:/etc/ssl/certs",
+          "${NOMAD_TASK_DIR}/kubernetes:/etc/kubernetes"
+        ]
+
+        command = "kube-controller-manager"
+        args = [
+          "--kubeconfig=local/kubernetes/controller-manager.conf",
+          "--root-ca-file=local/kubernetes/pki/ca.crt",
+          "--controllers=*,bootstrapsigner,tokencleaner",
+          "--service-account-private-key-file=local/kubernetes/pki/sa.key",
+          "--cluster-signing-cert-file=local/kubernetes/pki/ca.crt",
+          "--cluster-signing-key-file=local/kubernetes/pki/ca.key",
+          "--address=127.0.0.1",
+          "--leader-elect=true",
+          "--use-service-account-credentials=true"
+        ]
+      }
+
+      resources {
+        cpu    = 500 # 500 MHz
+        memory = 256 # 256MB
+        network {
+          mbits = 100
+          port "controller" {
+            static = "10252"
+          }
+        }
+      }
+
+      service {
+        name = "kube-controller-manager"
+        tags = ["global", "kubernetes", "controller-manager"]
+        port = "controller"
+        check {
+          type     = "http"
+          port     = "controller"
+          path     = "/healthz"
+          interval = "5s"
+          timeout  = "2s"
+        }
+      }
+    }
+
+    task "kube-scheduler" {
+      driver = "docker"
+
+      template {
+        destination = "local/kube-apiserver.env"
+        env         = true
+        data      = <<EOH
+ETCD_SERVERS={{key "etcd/servers"}}
+EOH
+      }
+
+      artifact {
+        source = "$BOOTSTRAP_K8S_CONFIG_BUNDLE"
+        destination = "local/kubernetes"
+      }
+      
+      config {
+        image = "gcr.io/google_containers/kube-scheduler-amd64:v1.7.6"
+        network_mode = "host"
+
+        volumes = [
+          "/etc/ssl/certs:/etc/ssl/certs",
+          "${NOMAD_TASK_DIR}/kubernetes:/etc/kubernetes"
+        ]
+
+        command = "kube-scheduler"
+        args = [
+          "--address=127.0.0.1",
+          "--leader-elect=true",
+          "--kubeconfig=local/kubernetes/scheduler.conf"
+        ]
+      }
+
+      resources {
+        cpu    = 500 # 500 MHz
+        memory = 256 # 256MB
+        network {
+          mbits = 100
+          port "scheduler" {
+            static = "10251"
+          }
+        }
+      }
+
+      service {
+        name = "kube-scheduler"
+        tags = ["global", "kubernetes", "scheduler"]
+        port = "scheduler"
+        check {
+          type     = "http"
+          port     = "10251"
+          path     = "/healthz"
+          interval = "5s"
+          timeout  = "2s"
+        }
       }
     }
   }

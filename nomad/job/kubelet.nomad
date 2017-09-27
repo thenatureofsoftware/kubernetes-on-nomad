@@ -11,10 +11,10 @@
 #
 #     https://www.nomadproject.io/docs/job-specification/job.html
 #
-job "kubelet-master" {
+job "kubelet" {
   region = "global"
   datacenters = ["dc1"]
-  type = "service"
+  type = "system"
 
   update {
     max_parallel = 1
@@ -39,31 +39,60 @@ job "kubelet-master" {
     }
 
     ephemeral_disk {
-      size = 300
+      migrate = true
+      size    = "100"
+      sticky  = true
+    }
+
+    task "init" {
+      driver = "raw_exec"
+
+      template {
+        destination = "local/kubadm.env"
+        env         = true
+        data      = <<EOH
+KUBEADM_JOIN_TOKEN={{key "kubernetes/join-token"}}
+KUBE_APISERVER={{ range service "kube-apiserver|any" }}{{ .Address }}:{{ .Port }}{{ end }}
+KUBE_KUBERNETES_DIR=alloc/kubernetes
+EOH
+      }
+
+      config {
+        command = "kubeadm"
+        args    = [
+          "join",
+          "--token=${KUBEADM_JOIN_TOKEN}",
+          "${KUBE_APISERVER}"
+        ]
+      }
     }
 
     task "kubelet" {
       driver = "raw_exec"
 
+      template {
+        destination = "local/kubelet.env"
+        env         = true
+        data      = <<EOH
+KUBEADM_JOIN_TOKEN={{key "kubernetes/join-token"}}
+KUBE_KUBERNETES_DIR=local/kubernetes
+EOH
+      }
+
       config {
         command = "/usr/bin/kubelet"
-        args    = ["--kubeconfig=local/kubernetes/kubelet.conf",
+        args    = ["--kubeconfig=alloc/kubernetes/kubelet.conf",
                   "--require-kubeconfig=true",
-                  "--pod-manifest-path=local/kubernetes/manifests",
+                  "--pod-manifest-path=alloc/kubernetes/manifests",
                   "--allow-privileged=true",
                   "--network-plugin=cni",
                   "--cni-conf-dir=/etc/cni/net.d",
                   "--cni-bin-dir=/opt/cni/bin",
-                  "--cluster-dns=${NOMAD_IP_kubelet}",
+                  "--cluster-dns=10.96.0.10",
                   "--cluster-domain=cluster.local",
                   "--authorization-mode=Webhook",
-                  "--client-ca-file=local/kubernetes/pki/ca.crt",
+                  "--client-ca-file=alloc/kubernetes/pki/ca.crt",
                   "--cadvisor-port=0"]
-      }
-
-      artifact {
-        source = "${BOOTSTRAP_K8S_CONFIG_BUNDLE}"
-        destination = "local/kubernetes"
       }
 
       resources {
