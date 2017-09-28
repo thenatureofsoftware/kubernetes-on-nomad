@@ -10,7 +10,7 @@ kubelet::install () {
 EOF
     apt-get update > /dev/null 2>&1
     apt-get install -y kubelet > /dev/null 2>&1
-    curl -LO https://storage.googleapis.com/kubernetes-release/release/$KUBEADM_VERSION/bin/linux/amd64/kubeadm
+    wget --quiet https://storage.googleapis.com/kubernetes-release/release/$KUBEADM_VERSION/bin/linux/amd64/kubeadm
     chmod a+x kubeadm
     mv kubeadm $BINDIR
 

@@ -25,10 +25,6 @@ Vagrant.configure(2) do |config|
       node.vm.hostname = vm_name
       node.vm.network :private_network, ip: ip
 
-    
-      # fix for resolv.conf
-      node.vm.provision :shell, :inline => "printf 'nameserver 127.0.0.53\n' | cat - /etc/resolv.conf > temp && mv temp /etc/resolv.conf", :privileged => true
-
       # setup environment file
       setup_file = Tempfile.new('setup.env', :binmode => true)
       setup_file.write("ADVERTISE_IP=#{ip}\n")
@@ -63,7 +59,7 @@ Vagrant.configure(2) do |config|
       node.vm.provision :shell, :inline => "mkdir -p /etc/nomad && mv /tmp/nomad.env /etc/nomad/nomad.env", :privileged => true
 
       node.vm.provision "shell", inline: <<-SHELL
-      sudo DEBIAN_FRONTEND=noninteractive /vagrant/nomad_setup.sh
+      sudo DEBIAN_FRONTEND=noninteractive /vagrant/nomad_cluster_up.sh
       SHELL
     end
   end

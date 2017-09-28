@@ -56,6 +56,9 @@ kon::generate_kubeconfigs () {
     done
 }
 
+###############################################################################
+# Generates kubeconfig file for each node (minion).                           #
+###############################################################################
 kon::generate_kubeconfig () {
     info "generating kubeconfig for minion: $1 with ip: $2"
     rm $K8S_CONFIGDIR/kubelet.conf > /dev/null 2>&1
@@ -66,6 +69,9 @@ kon::generate_kubeconfig () {
     info "\n$(consul::put kubernetes/minions/$1/ip $2)"
 }
 
+###############################################################################
+# Stores key and cert in consul given a key and cert pair name.               #
+###############################################################################
 kon::put_cert_and_key() {
     info "Storing key and cert for $1"
     consul::put_file kubernetes/certs/$1/key $K8S_PKIDIR/$1.key
@@ -179,10 +185,8 @@ kon::load_config
 #sleep 5
 #log "Continuing ..."
 
-
-#kon::generate_certificates
+kon::generate_certificates
 kon::generate_kubeconfigs
-
-#bootstrap::run_etcd
+bootstrap::run_etcd
 
 

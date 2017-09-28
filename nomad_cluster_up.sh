@@ -34,6 +34,7 @@ source $SCRIPTDIR/vault_install.sh
 source $SCRIPTDIR/nomad_install.sh
 source $SCRIPTDIR/kubelet_install.sh
 source $SCRIPTDIR/minio_install.sh
+source $SCRIPTDIR/cfssl_install.sh
 
 log "step 1 - Preparing node by installing consul, nomad and kubernetes binaries"
 log "Consul version: $CONSUL_VERSION"
@@ -42,6 +43,7 @@ log "Nomad version: $NOMAD_VERSION"
 
 common::check_root
 common::install
+cfssl::install
 
 docker::install
 
@@ -55,3 +57,4 @@ nomad::install
 nomad::enable_service
 
 kubelet::install
+consul::enable_dns

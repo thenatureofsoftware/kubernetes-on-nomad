@@ -23,28 +23,23 @@ consul::enable_service () {
 
 consul::enable_dns () {
     log "Switching to consul as only nameserver..."
-    systemctl stop systemd-resolved
-    if [ -f /etc/resolv.conf.org ]; then
-      log "Restoring /etc/resolv.conf"
-      cp /etc/resolv.conf.org /etc/resolv.conf 
-    else
-      log "Saving original /etc/resolv.conf"
-      mv /etc/resolv.conf /etc/resolv.conf.org
-      cp /etc/resolv.conf.org /etc/resolv.conf
-    fi
     source $BASEDIR/script/iptables.rules
     iptables -t nat -A PREROUTING -p udp -m udp --dport 53 -j REDIRECT --to-ports 8600
     iptables -t nat -A PREROUTING -p tcp -m tcp --dport 53 -j REDIRECT --to-ports 8600
     iptables -t nat -A OUTPUT -d localhost -p udp -m udp --dport 53 -j REDIRECT --to-ports 8600
     iptables -t nat -A OUTPUT -d localhost -p tcp -m tcp --dport 53 -j REDIRECT --to-ports 8600
-    log "Consul DNS recursors:\n$(cat $BASEDIR/consul/consul.json | jq '.recursors')"
-    log "Now using consul as nameserver"
+    
+    printf "\n#Using consul and consul recursors\nnameserver 127.0.0.1\n" >> /etc/resolvconf/resolv.conf.d/head
+    resolvconf -u
+
+    info "Consul DNS recursors:\n$(cat $BASEDIR/consul/consul.json | jq '.recursors')"
+    info "Now using consul as nameserver"
 }
 
 consul::put () {
-    log "$(consul kv put $1 $2) value: $2"
+    info "$(consul kv put $1 $2) value: $2"
 }
 
 consul::put_file () {
-    log "$(consul kv put $1 @$2) value: $2"
+    info "$(consul kv put $1 @$2) value: $2"
 }
