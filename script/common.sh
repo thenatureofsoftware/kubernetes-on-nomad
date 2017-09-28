@@ -14,7 +14,6 @@ err () {
 
 common::log () {
     DATE='date +%Y/%m/%d:%H:%M:%S'
-    echo "Num of args $#"
     if [ $# -lt 2 ]; then
         printf "["`$DATE`" kubernetes-on-nomad $(hostname) Info] $1\n" | awk '{$1=$1};1' | tee -a $BASEDIR/kubernetes-on-nomad.log
     else

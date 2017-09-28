@@ -4,6 +4,9 @@ BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SCRIPTDIR=$BASEDIR/script
 JOBDIR=$BASEDIR/nomad/job
 K8S_ON_NOMAD_CONFIG_FILE=$BASEDIR/kubernetes_on_nomad.conf
+K8S_CONFIGDIR=${K8S_PKIDIR:=/etc/kubernetes}
+K8S_PKIDIR=${K8S_PKIDIR:=$K8S_CONFIGDIR/pki}
+
 
 MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:=9B4T6UOOQNQRRHSAWVPY}
 MINIO_SECRET_KEY=${MINIO_SECRET_KEY:=HtcN68VAx0Ty5UslYokP6UA3OBfWVMFDZX6aJIfh}
@@ -11,6 +14,9 @@ OBJECT_STORE="kube-store"
 BUCKET="resources"
 ETCD_SERVERS=${ETCD_SERVERS:=""}
 
+###############################################################################
+# Loads configuration file                                                    #
+###############################################################################
 kon::load_config () {
     if [ ! -f "$K8S_ON_NOMAD_CONFIG_FILE" ]; then
         err "$K8S_ON_NOMAD_CONFIG_FILE no such file"
@@ -18,6 +24,52 @@ kon::load_config () {
         exit 1
     fi
     source $K8S_ON_NOMAD_CONFIG_FILE
+}
+
+###############################################################################
+# Generates certificates and stores them in consul.                           #
+###############################################################################
+kon::generate_certificates () {
+    info "Cleaning up any certificates in $K8S_PKIDIR"
+    if [ -d "$K8S_PKIDIR" ]; then
+        rm -rf $K8S_PKIDIR/
+    fi
+    info "\n$(kubeadm alpha phase certs all --apiserver-advertise-address=$KUBE_APISERVER --apiserver-cert-extra-sans=$KUBE_APISERVER_EXTRA_SANS)"
+    kon::put_cert_and_key "ca"
+    kon::put_cert_and_key "apiserver"
+    kon::put_cert_and_key "apiserver-kubelet-client"
+    kon::put_cert_and_key "front-proxy-ca"
+    kon::put_cert_and_key "front-proxy-client"
+    consul::put_file kubernetes/certs/sa/key $K8S_PKIDIR/sa.key
+    consul::put_file kubernetes/certs/sa/cert $K8S_PKIDIR/sa.pub
+}
+
+###############################################################################
+# Generates kubeconfig files.                                                 #
+###############################################################################
+kon::generate_kubeconfigs () {
+    IFS=',' read -ra MINIONS <<< "$KUBE_MINIONS"    
+    for minion in ${MINIONS[@]}; do
+        NAME=$(printf $minion|awk -F'=' '{print $1}')
+        IP=$(printf $minion|awk -F'=' '{print $2}')
+        kon::generate_kubeconfig "$NAME" "$IP"
+    done
+}
+
+kon::generate_kubeconfig () {
+    info "generating kubeconfig for minion: $1 with ip: $2"
+    rm $K8S_CONFIGDIR/kubelet.conf > /dev/null 2>&1
+    info "$(kubeadm alpha phase kubeconfig kubelet --node-name=$1 --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
+    info "$(kubectl --kubeconfig=/etc/kubernetes/kubelet.conf config set-cluster kubernetes --server=$KUBE_APISERVER_ADDRESS)"
+    info "\n$(kubectl --kubeconfig=$K8S_CONFIGDIR/kubelet.conf config view)"
+    info "\n$(consul::put_file kubernetes/minions/$1/kubeconfig $K8S_CONFIGDIR/kubelet.conf)"
+    info "\n$(consul::put kubernetes/minions/$1/ip $2)"
+}
+
+kon::put_cert_and_key() {
+    info "Storing key and cert for $1"
+    consul::put_file kubernetes/certs/$1/key $K8S_PKIDIR/$1.key
+    consul::put_file kubernetes/certs/$1/cert $K8S_PKIDIR/$1.crt
 }
 
 bootstrap::run_object_store () {
@@ -128,15 +180,9 @@ kon::load_config
 #log "Continuing ..."
 
 
+#kon::generate_certificates
+kon::generate_kubeconfigs
 
-#bootstrap::create_k8s_config
-#source $BOOTSTRAP_K8S_CONFIG_FILE
-#bootstrap::upload_bundle
-#BOOTSTRAP_K8S_CONFIG_BUNDLE=$(sudo mc share download kube-store/resources/kubernetes_config.tar.gz|grep Share)
-#consul::put "kubernetes/config-bundle" "${BOOTSTRAP_K8S_CONFIG_BUNDLE:7}"
-#consul::put "kubernetes/join-token" "$KUBEADM_JOIN_TOKEN"
+#bootstrap::run_etcd
 
-bootstrap::run_etcd
-#bootstrap::run_kubelet
-#bootstrap::run_kube-control-plane
 

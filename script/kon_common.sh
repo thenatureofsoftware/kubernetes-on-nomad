@@ -30,8 +30,10 @@ node4=192.168.0.3
 # kube-apiserver advertise address
 ###############################################################################
 KUBE_APISERVER=192.168.0.1
+KUBE_APISERVER_PORT=6443
 
 KUBE_APISERVER_EXTRA_SANS=kubernetes.service.dc1.consul,kubernetes.service.dc1,kubernetes.service
+KUBE_APISERVER_ADDRESS=https://kubernetes.service.dc1.consul:6443
 
 EOF
 }
