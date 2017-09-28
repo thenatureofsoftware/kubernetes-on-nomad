@@ -9,7 +9,11 @@ kubelet::install () {
     deb http://apt.kubernetes.io/ kubernetes-xenial main
 EOF
     apt-get update > /dev/null 2>&1
-    apt-get install -y kubelet kubeadm > /dev/null 2>&1
+    apt-get install -y kubelet > /dev/null 2>&1
+    curl -LO https://storage.googleapis.com/kubernetes-release/release/$KUBEADM_VERSION/bin/linux/amd64/kubeadm
+    chmod a+x kubeadm
+    mv kubeadm $BINDIR
+
     log "$(kubelet --version)"
     log "$(kubeadm version)"
     log "Done installing Kubernetes components"

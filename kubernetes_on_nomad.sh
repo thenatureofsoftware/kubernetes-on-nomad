@@ -3,27 +3,21 @@
 BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SCRIPTDIR=$BASEDIR/script
 JOBDIR=$BASEDIR/nomad/job
-BOOTSTRAP_K8S_CONFIG_FILE=$BASEDIR/kubernetes_bootstrap_config.env
-BOOTSTRAP_K8S_CONFIG_BUNDLE_FILE_NAME=kubernetes_config.tar.gz
-BOOTSTRAP_K8S_CONFIG_BUNDLE=$BASEDIR/$BOOTSTRAP_K8S_CONFIG_BUNDLE_FILE_NAME
+K8S_ON_NOMAD_CONFIG_FILE=$BASEDIR/kubernetes_on_nomad.conf
+
 MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:=9B4T6UOOQNQRRHSAWVPY}
 MINIO_SECRET_KEY=${MINIO_SECRET_KEY:=HtcN68VAx0Ty5UslYokP6UA3OBfWVMFDZX6aJIfh}
 OBJECT_STORE="kube-store"
 BUCKET="resources"
 ETCD_SERVERS=${ETCD_SERVERS:=""}
 
-bootstrap::env_file () {
-    if [ -f /tmp/setup.env ]; then
-        log "Loading environment variables from /tmp/setup.env"
-        source /tmp/setup.env
+kon::load_config () {
+    if [ ! -f "$K8S_ON_NOMAD_CONFIG_FILE" ]; then
+        err "$K8S_ON_NOMAD_CONFIG_FILE no such file"
+        kon::generate_config_template
+        exit 1
     fi
-    if [ -f $BASEDIR/setup.env ]; then
-        log "Loading environment variables from $BASEDIR/setup.env"
-        source $BASEDIR/setup.env
-    fi
-    log "etcd servers: $ETCD_SERVERS"
-    log "etcd initial-cluster: $ETCD_INITIAL_CLUSTER"
-    log "etcd initial-cluster-token: $ETCD_INITIAL_CLUSTER_TOKEN"
+    source $K8S_ON_NOMAD_CONFIG_FILE
 }
 
 bootstrap::run_object_store () {
@@ -81,9 +75,30 @@ bootstrap::upload_bundle () {
 }
 
 bootstrap::run_etcd () {
-    log "Submitting job etcd to Nomad..."
-    log "$(nomad run ${JOBDIR}/etcd.nomad)"
-    log "Job submited"
+    
+    if [ "$ETCD_SERVERS" == "" ]; then
+        err "ETCD_SERVERS is not set"
+        exit 1
+    fi
+
+    if [ "$ETCD_INITIAL_CLUSTER" == "" ]; then
+        err "ETCD_INITIAL_CLUSTER is not set"
+        exit 1
+    fi
+
+    if [ "$ETCD_INITIAL_CLUSTER_TOKEN" == "" ]; then
+        err "ETCD_INITIAL_CLUSTER_TOKEN is not set"
+        exit 1
+    fi
+
+    consul::put "etcd/servers" "$ETCD_SERVERS"
+    consul::put "etcd/initial-cluster" "$ETCD_INITIAL_CLUSTER"
+    consul::put "etcd/initial-cluster-token" "$ETCD_INITIAL_CLUSTER_TOKEN"
+
+    info "Submitting job etcd to Nomad..."
+    #info "$(nomad run ${JOBDIR}/etcd.nomad)"
+    info "Job submited"
+
 }
 
 bootstrap::run_kubelet () {
@@ -101,19 +116,18 @@ bootstrap::run_kube-control-plane () {
 }
 
 source $SCRIPTDIR/common.sh
+source $SCRIPTDIR/kon_common.sh
 source $SCRIPTDIR/consul_install.sh
 
 common::check_root
-bootstrap::env_file
+kon::load_config
 
 #bootstrap::run_object_store
 #log "Waiting for object store to start..."
 #sleep 5
 #log "Continuing ..."
 
-consul::put "etcd/servers" "$ETCD_SERVERS"
-consul::put "etcd/initial-cluster" "$ETCD_INITIAL_CLUSTER"
-consul::put "etcd/initial-cluster-token" "$ETCD_INITIAL_CLUSTER_TOKEN"
+
 
 #bootstrap::create_k8s_config
 #source $BOOTSTRAP_K8S_CONFIG_FILE
@@ -125,6 +139,4 @@ consul::put "etcd/initial-cluster-token" "$ETCD_INITIAL_CLUSTER_TOKEN"
 bootstrap::run_etcd
 #bootstrap::run_kubelet
 #bootstrap::run_kube-control-plane
-
-source $BOOTSTRAP_K8S_CONFIG_FILE
 

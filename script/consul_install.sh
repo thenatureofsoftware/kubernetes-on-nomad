@@ -44,3 +44,7 @@ consul::enable_dns () {
 consul::put () {
     log "$(consul kv put $1 $2) value: $2"
 }
+
+consul::put_file () {
+    log "$(consul kv put $1 @$2) value: $2"
+}
