@@ -4,7 +4,7 @@ BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SCRIPTDIR=$BASEDIR/script
 JOBDIR=$BASEDIR/nomad/job
 K8S_ON_NOMAD_CONFIG_FILE=$BASEDIR/kubernetes_on_nomad.conf
-K8S_CONFIGDIR=${K8S_PKIDIR:=/etc/kubernetes}
+K8S_CONFIGDIR=${K8S_CONFIGDIR:=/etc/kubernetes}
 K8S_PKIDIR=${K8S_PKIDIR:=$K8S_CONFIGDIR/pki}
 
 

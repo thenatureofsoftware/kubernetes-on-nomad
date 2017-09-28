@@ -40,50 +40,33 @@ job "kubelet" {
 
     ephemeral_disk {
       migrate = true
-      size    = "100"
+      size    = "500"
       sticky  = true
-    }
-
-    task "init" {
-      driver = "raw_exec"
-
-      template {
-        destination = "local/kubadm.env"
-        env         = true
-        data      = <<EOH
-KUBEADM_JOIN_TOKEN={{key "kubernetes/join-token"}}
-KUBE_APISERVER={{ range service "kube-apiserver|any" }}{{ .Address }}:{{ .Port }}{{ end }}
-KUBE_KUBERNETES_DIR=alloc/kubernetes
-EOH
-      }
-
-      config {
-        command = "kubeadm"
-        args    = [
-          "join",
-          "--token=${KUBEADM_JOIN_TOKEN}",
-          "${KUBE_APISERVER}"
-        ]
-      }
     }
 
     task "kubelet" {
       driver = "raw_exec"
 
       template {
-        destination = "local/kubelet.env"
-        env         = true
-        data      = <<EOH
-KUBEADM_JOIN_TOKEN={{key "kubernetes/join-token"}}
-KUBE_KUBERNETES_DIR=local/kubernetes
-EOH
+        destination = "local/kubernetes/kubelet.conf"
+        data      = <<EOF
+{{printf "kubernetes/minions/%s/kubeconfig" (env "attr.unique.hostname") | key }}
+EOF
+      }
+
+
+      template {
+        destination = "local/kubernetes/pki/ca.crt"
+        data      = <<EOF
+{{key "kubernetes/certs/ca/cert"}}
+EOF
       }
 
       config {
         command = "/usr/bin/kubelet"
-        args    = ["--kubeconfig=alloc/kubernetes/kubelet.conf",
+        args    = ["--kubeconfig=local/kubernetes/kubelet.conf",
                   "--require-kubeconfig=true",
-                  "--pod-manifest-path=alloc/kubernetes/manifests",
+                  "--pod-manifest-path=/etc/kubernetes/manifests",
                   "--allow-privileged=true",
                   "--network-plugin=cni",
                   "--cni-conf-dir=/etc/cni/net.d",
@@ -91,7 +74,7 @@ EOH
                   "--cluster-dns=10.96.0.10",
                   "--cluster-domain=cluster.local",
                   "--authorization-mode=Webhook",
-                  "--client-ca-file=alloc/kubernetes/pki/ca.crt",
+                  "--client-ca-file=local/kubernetes/pki/ca.crt",
                   "--cadvisor-port=0"]
       }
 
@@ -99,7 +82,7 @@ EOH
         cpu    = 500 # 500 MHz
         memory = 256 # 256MB
         network {
-          mbits = 10
+          mbits = 100
           port "kubelet" {
             static = "10250"
           }

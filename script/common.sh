@@ -24,7 +24,7 @@ common::log () {
 
 common::check_root () {
     if [[ $EUID -ne 0 ]]; then
-        echo "This script must be run as root" 1>&2
+        err "This script must be run as root"
         exit 1
     fi
 }
@@ -42,5 +42,5 @@ common::service_address () {
 }
 
 common::rm_all_running_containers () {
-    docker rm -f `docker ps -q` 1>&2
+    docker rm -f `docker ps -q` > /dev/null 2>&1
 }

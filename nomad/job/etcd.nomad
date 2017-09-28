@@ -12,7 +12,7 @@ job "etcd" {
   }
 
 
-  group "grp" {
+  group "etcd-servers" {
     count = 1
 
     constraint {
@@ -44,12 +44,10 @@ job "etcd" {
         env         = true
         data      = <<EOH
 ETCD_INITIAL_CLUSTER={{key "etcd/initial-cluster"}}
-ETCD_INITIAL_CLUSTER_1={{key "etcd/initial-cluster"}},{{ env "attr.unique.hostname" }}=http://127.0.0.1:2380
 ETCD_INITIAL_CLUSTER_TOKEN={{key "etcd/initial-cluster-token"}}
-NODE_STATUS={{printf "kubernetes/nodes/%s" (env "attr.unique.hostname") | key}}
 EOH
       }
-      
+      #NODE_STATUS={{printf "kubernetes/nodes/%s" (env "attr.unique.hostname") | key}}
       config {
         image = "gcr.io/google_containers/etcd-amd64:3.0.17"
         network_mode = "host"
