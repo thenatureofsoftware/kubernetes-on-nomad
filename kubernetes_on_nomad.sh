@@ -32,16 +32,24 @@ kon::load_config () {
 kon::generate_certificates () {
     info "Cleaning up any certificates in $K8S_PKIDIR"
     if [ -d "$K8S_PKIDIR" ]; then
-        rm -rf $K8S_PKIDIR/
+        rm -rf $K8S_PKIDIR/*
+    else
+        mkdir -p $K8S_PKIDIR
     fi
+    kon::get_cert_and_key "ca"
+    kon::get_cert_and_key "apiserver"
+    kon::get_cert_and_key "apiserver-kubelet-client"
+    kon::get_cert_and_key "front-proxy-ca"
+    kon::get_cert_and_key "front-proxy-client"
+    kon::get_cert_and_key "sa"
+
     info "\n$(kubeadm alpha phase certs all --apiserver-advertise-address=$KUBE_APISERVER --apiserver-cert-extra-sans=$KUBE_APISERVER_EXTRA_SANS)"
     kon::put_cert_and_key "ca"
     kon::put_cert_and_key "apiserver"
     kon::put_cert_and_key "apiserver-kubelet-client"
     kon::put_cert_and_key "front-proxy-ca"
     kon::put_cert_and_key "front-proxy-client"
-    consul::put_file kubernetes/certs/sa/key $K8S_PKIDIR/sa.key
-    consul::put_file kubernetes/certs/sa/cert $K8S_PKIDIR/sa.pub
+    kon::put_cert_and_key "sa"
 }
 
 ###############################################################################
@@ -54,6 +62,24 @@ kon::generate_kubeconfigs () {
         IP=$(printf $minion|awk -F'=' '{print $2}')
         kon::generate_kubeconfig "$NAME" "$IP"
     done
+
+    # kubeconfig for controller-manager
+    info "$(kubeadm alpha phase kubeconfig controller-manager --cert-dir=$K8S_PKIDIR --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
+    info "$(kubectl --kubeconfig=$K8S_CONFIGDIR/controller-manager.conf config set-cluster kubernetes --server=$KUBE_APISERVER_ADDRESS)"
+    info "kubeconfig for controller-manager\n$(kubectl --kubeconfig=$K8S_CONFIGDIR/controller-manager.conf config view)"
+    info "\n$(consul::put_file kubernetes/controller-manager/kubeconfig $K8S_CONFIGDIR/controller-manager.conf)"
+
+    # kubeconfig for scheduler
+    info "$(kubeadm alpha phase kubeconfig scheduler --cert-dir=$K8S_PKIDIR --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
+    info "$(kubectl --kubeconfig=$K8S_CONFIGDIR/scheduler.conf config set-cluster kubernetes --server=$KUBE_APISERVER_ADDRESS)"
+    info "kubeconfig for scheduler\n$(kubectl --kubeconfig=$K8S_CONFIGDIR/scheduler.conf config view)"
+    info "\n$(consul::put_file kubernetes/scheduler/kubeconfig $K8S_CONFIGDIR/scheduler.conf)"
+
+    # kubeconfig for admin
+    info "$(kubeadm alpha phase kubeconfig admin --cert-dir=$K8S_PKIDIR --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
+    info "$(kubectl --kubeconfig=$K8S_CONFIGDIR/admin.conf config set-cluster kubernetes --server=$KUBE_APISERVER_ADDRESS)"
+    info "kubeconfig for admin\n$(kubectl --kubeconfig=$K8S_CONFIGDIR/admin.conf config view)"
+    info "\n$(consul::put_file kubernetes/admin/kubeconfig $K8S_CONFIGDIR/admin.conf)"
 }
 
 ###############################################################################
@@ -62,9 +88,10 @@ kon::generate_kubeconfigs () {
 kon::generate_kubeconfig () {
     info "generating kubeconfig for minion: $1 with ip: $2"
     rm $K8S_CONFIGDIR/kubelet.conf > /dev/null 2>&1
-    info "$(kubeadm alpha phase kubeconfig kubelet --node-name=$1 --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
+    info "$(kubeadm alpha phase kubeconfig kubelet \
+    --cert-dir=$K8S_PKIDIR --node-name=$1 --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
     info "$(kubectl --kubeconfig=/etc/kubernetes/kubelet.conf config set-cluster kubernetes --server=$KUBE_APISERVER_ADDRESS)"
-    info "\n$(kubectl --kubeconfig=$K8S_CONFIGDIR/kubelet.conf config view)"
+    info "kubeconfig for $1:\n$(kubectl --kubeconfig=$K8S_CONFIGDIR/kubelet.conf config view)"
     info "\n$(consul::put_file kubernetes/minions/$1/kubeconfig $K8S_CONFIGDIR/kubelet.conf)"
     info "\n$(consul::put kubernetes/minions/$1/ip $2)"
 }
@@ -75,7 +102,27 @@ kon::generate_kubeconfig () {
 kon::put_cert_and_key() {
     info "Storing key and cert for $1"
     consul::put_file kubernetes/certs/$1/key $K8S_PKIDIR/$1.key
-    consul::put_file kubernetes/certs/$1/cert $K8S_PKIDIR/$1.crt
+    if [ "$1" == "sa" ]; then
+        consul::put_file kubernetes/certs/$1/cert $K8S_PKIDIR/$1.pub
+    else
+        consul::put_file kubernetes/certs/$1/cert $K8S_PKIDIR/$1.crt
+    fi
+}
+
+###############################################################################
+# Fetches any existing cert and key from consul                               #
+###############################################################################
+kon::get_cert_and_key() {
+    consul kv get kubernetes/certs/$1/key
+    if [ $? -eq 0 ]; then
+        info "Found key and cert pair for kubernetes/certs/$1"
+        consul kv get kubernetes/certs/$1/key > $K8S_PKIDIR/$1.key
+        if [ "$1" == "sa" ]; then
+            consul kv get kubernetes/certs/$1/cert > $K8S_PKIDIR/$1.pub
+        else
+            consul kv get kubernetes/certs/$1/cert > $K8S_PKIDIR/$1.crt
+        fi
+    fi
 }
 
 bootstrap::run_object_store () {

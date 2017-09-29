@@ -1,16 +1,3 @@
-# There can only be a single job definition per file. This job is named
-# "example" so it will create a job with the ID and Name "example".
-
-# The "job" stanza is the top-most configuration option in the job
-# specification. A job is a declarative specification of tasks that Nomad
-# should run. Jobs have a globally unique name, one or many task groups, which
-# are themselves collections of one or many tasks.
-#
-# For more information and examples on the "job" stanza, please see
-# the online documentation at:
-#
-#     https://www.nomadproject.io/docs/job-specification/job.html
-#
 job "kube-control-plane" {
   region = "global"
   datacenters = ["dc1"]
@@ -25,7 +12,7 @@ job "kube-control-plane" {
   }
 
 
-  group "grp" {
+  group "components" {
     count = 1
 
     restart {
@@ -38,11 +25,6 @@ job "kube-control-plane" {
       mode = "delay"
     }
 
-    ephemeral_disk {
-      migrate = true
-      size = 500
-    }
-
     task "kube-apiserver" {
       driver = "docker"
 
@@ -53,10 +35,59 @@ job "kube-control-plane" {
 ETCD_SERVERS={{key "etcd/servers"}}
 EOH
       }
-
-      artifact {
-        source = "$BOOTSTRAP_K8S_CONFIG_BUNDLE"
-        destination = "local/kubernetes"
+      template {
+        destination = "local/kubernetes/pki/ca.crt"
+        data      = <<EOF
+{{key "kubernetes/certs/ca/cert"}}
+EOF
+      }
+      template {
+        destination = "local/kubernetes/pki/front-proxy-client.crt"
+        data      = <<EOF
+{{key "kubernetes/certs/front-proxy-client/cert"}}
+EOF
+      }
+      template {
+        destination = "local/kubernetes/pki/front-proxy-client.key"
+        data      = <<EOF
+{{key "kubernetes/certs/front-proxy-client/key"}}
+EOF
+      }
+      template {
+        destination = "local/kubernetes/pki/apiserver-kubelet-client.crt"
+        data      = <<EOF
+{{key "kubernetes/certs/apiserver-kubelet-client/cert"}}
+EOF
+      }
+      template {
+        destination = "local/kubernetes/pki/front-proxy-ca.crt"
+        data      = <<EOF
+{{key "kubernetes/certs/front-proxy-ca/cert"}}
+EOF
+      }
+      template {
+        destination = "local/kubernetes/pki/apiserver.key"
+        data      = <<EOF
+{{key "kubernetes/certs/apiserver/key"}}
+EOF
+      }
+      template {
+        destination = "local/kubernetes/pki/apiserver.crt"
+        data      = <<EOF
+{{key "kubernetes/certs/apiserver/cert"}}
+EOF
+      }
+      template {
+        destination = "local/kubernetes/pki/apiserver-kubelet-client.key"
+        data      = <<EOF
+{{key "kubernetes/certs/apiserver-kubelet-client/key"}}
+EOF
+      }
+      template {
+        destination = "local/kubernetes/pki/sa.pub"
+        data      = <<EOF
+{{key "kubernetes/certs/sa/cert"}}
+EOF
       }
       
       config {
@@ -98,7 +129,7 @@ EOH
 
       resources {
         cpu    = 500 # 500 MHz
-        memory = 1024 # 256MB
+        memory = 400 # 256MB
         network {
           mbits = 100
           port "https" {
@@ -108,7 +139,7 @@ EOH
       }
 
       service {
-        name = "kube-apiserver"
+        name = "kubernetes"
         tags = ["global", "kubernetes", "apiserver"]
         port = "https"
       }
@@ -124,10 +155,29 @@ EOH
 ETCD_SERVERS={{key "etcd/servers"}}
 EOH
       }
-
-      artifact {
-        source = "$BOOTSTRAP_K8S_CONFIG_BUNDLE"
-        destination = "local/kubernetes"
+      template {
+        destination = "local/kubernetes/controller-manager.conf"
+        data      = <<EOF
+{{key "kubernetes/controller-manager/kubeconfig" }}
+EOF
+      }
+      template {
+        destination = "local/kubernetes/pki/ca.crt"
+        data      = <<EOF
+{{key "kubernetes/certs/ca/cert"}}
+EOF
+      }
+      template {
+        destination = "local/kubernetes/pki/ca.key"
+        data      = <<EOF
+{{key "kubernetes/certs/ca/key"}}
+EOF
+      }
+      template {
+        destination = "local/kubernetes/pki/sa.key"
+        data      = <<EOF
+{{key "kubernetes/certs/sa/key"}}
+EOF
       }
       
       config {
@@ -182,16 +232,10 @@ EOH
       driver = "docker"
 
       template {
-        destination = "local/kube-apiserver.env"
-        env         = true
-        data      = <<EOH
-ETCD_SERVERS={{key "etcd/servers"}}
-EOH
-      }
-
-      artifact {
-        source = "$BOOTSTRAP_K8S_CONFIG_BUNDLE"
-        destination = "local/kubernetes"
+        destination = "local/kubernetes/scheduler.conf"
+        data      = <<EOF
+{{key "kubernetes/scheduler/kubeconfig" }}
+EOF
       }
       
       config {

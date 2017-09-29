@@ -1,6 +1,6 @@
 .vagrant
 tmp
-kubernetes_bootstrap_config.env
+kubernetes_on_nomad.conf
 setup.env
 *.log
 kubernetes_config.tar.gz
