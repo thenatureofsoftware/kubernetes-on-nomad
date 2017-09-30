@@ -64,7 +64,9 @@ EOF
 
       config {
         command = "/usr/bin/kubelet"
-        args    = ["--kubeconfig=local/kubernetes/kubelet.conf",
+        args    = ["--address=${attr.unique.network.ip-address}",
+                  "--fail-swap-on=false",
+                  "--kubeconfig=local/kubernetes/kubelet.conf",
                   "--require-kubeconfig=true",
                   "--pod-manifest-path=/etc/kubernetes/manifests",
                   "--allow-privileged=true",
@@ -75,7 +77,8 @@ EOF
                   "--cluster-domain=cluster.local",
                   "--authorization-mode=Webhook",
                   "--client-ca-file=local/kubernetes/pki/ca.crt",
-                  "--cadvisor-port=0"]
+                  "--cadvisor-port=0",
+                  "--v=4"]
       }
 
       resources {

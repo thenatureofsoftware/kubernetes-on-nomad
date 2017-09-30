@@ -5,6 +5,11 @@ kon::generate_config_template () {
 #!/bin/bash
 
 ###############################################################################
+# Kubernetes version
+###############################################################################
+K8S_VERSION=${K8S_VERSION:=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)}
+
+###############################################################################
 # List of comma separated addresses <scheme>://<ip>:<port>
 ###############################################################################
 ETCD_SERVERS=http://127.0.0.1:2379

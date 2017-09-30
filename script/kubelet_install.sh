@@ -10,7 +10,7 @@ kubelet::install () {
     deb http://apt.kubernetes.io/ kubernetes-xenial main
 EOF
     apt-get update > /dev/null 2>&1
-    apt-get install -y kubelet > /dev/null 2>&1
+    apt-get install -y kubelet=$K8S_VERSION > /dev/null 2>&1
     
     #kubelet::download_and_install "kubelet" "$K8S_VERSION"
     kubelet::download_and_install "kubectl" "$K8S_VERSION"

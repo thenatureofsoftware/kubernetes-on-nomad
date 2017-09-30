@@ -23,7 +23,7 @@ Vagrant.configure(2) do |config|
       ip = serverIP(i)
 
       node.vm.hostname = vm_name
-      node.vm.network :private_network, ip: ip
+      node.vm.network :private_network, ip: ip, virtualbox__intnet: true
 
       # setup environment file
       setup_file = Tempfile.new('setup.env', :binmode => true)

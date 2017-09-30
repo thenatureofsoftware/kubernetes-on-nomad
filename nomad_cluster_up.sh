@@ -23,7 +23,7 @@ MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:=9B4T6UOOQNQRRHSAWVPY}
 MINIO_SECRET_KEY=${MINIO_SECRET_KEY:=HtcN68VAx0Ty5UslYokP6UA3OBfWVMFDZX6aJIfh}
 
 # Kubernetes
-K8S_VERSION=v1.7.6
+K8S_VERSION=${K8S_VERSION:=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)}
 KUBEADM_VERSION=${KUBEADM_VERSION:=v1.9.0-alpha.1}
 
 source $BASEDIR/setup.env

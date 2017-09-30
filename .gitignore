@@ -1,6 +1,6 @@
 .vagrant
 tmp
-kubernetes_on_nomad.conf
+kon.conf
 setup.env
 *.log
 kubernetes_config.tar.gz

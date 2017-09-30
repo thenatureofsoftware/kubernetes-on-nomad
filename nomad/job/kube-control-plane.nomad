@@ -93,6 +93,7 @@ EOF
       config {
         image = "gcr.io/google_containers/kube-apiserver-amd64:v1.7.6"
         network_mode = "host"
+        dns_servers = ["127.0.0.1"]
 
         volumes = [
           "/etc/ssl/certs:/etc/ssl/certs",

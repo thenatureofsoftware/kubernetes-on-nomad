@@ -3,7 +3,8 @@
 BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SCRIPTDIR=$BASEDIR/script
 JOBDIR=$BASEDIR/nomad/job
-K8S_ON_NOMAD_CONFIG_FILE=$BASEDIR/kubernetes_on_nomad.conf
+K8S_ON_NOMAD_CONFIG_FILE=$BASEDIR/kon.conf
+KON_LOG_FILE=$BASEDIR/kon.log
 K8S_CONFIGDIR=${K8S_CONFIGDIR:=/etc/kubernetes}
 K8S_PKIDIR=${K8S_PKIDIR:=$K8S_CONFIGDIR/pki}
 
@@ -13,6 +14,16 @@ MINIO_SECRET_KEY=${MINIO_SECRET_KEY:=HtcN68VAx0Ty5UslYokP6UA3OBfWVMFDZX6aJIfh}
 OBJECT_STORE="kube-store"
 BUCKET="resources"
 ETCD_SERVERS=${ETCD_SERVERS:=""}
+
+###############################################################################
+# Checks that the script is run as root                                       #
+###############################################################################
+kon::check_root () {
+    if [[ $EUID -ne 0 ]]; then
+        err "This script must be run as root"
+        exit 1
+    fi
+}
 
 ###############################################################################
 # Loads configuration file                                                    #
@@ -56,6 +67,7 @@ kon::generate_certificates () {
 # Generates kubeconfig files.                                                 #
 ###############################################################################
 kon::generate_kubeconfigs () {
+    rm $K8S_CONFIGDIR/*.conf /dev/null 2>&1
     IFS=',' read -ra MINIONS <<< "$KUBE_MINIONS"    
     for minion in ${MINIONS[@]}; do
         NAME=$(printf $minion|awk -F'=' '{print $1}')
@@ -113,7 +125,7 @@ kon::put_cert_and_key() {
 # Fetches any existing cert and key from consul                               #
 ###############################################################################
 kon::get_cert_and_key() {
-    consul kv get kubernetes/certs/$1/key
+    consul kv get kubernetes/certs/$1/key > /dev/null 2>&1
     if [ $? -eq 0 ]; then
         info "Found key and cert pair for kubernetes/certs/$1"
         consul kv get kubernetes/certs/$1/key > $K8S_PKIDIR/$1.key
@@ -123,6 +135,23 @@ kon::get_cert_and_key() {
             consul kv get kubernetes/certs/$1/cert > $K8S_PKIDIR/$1.crt
         fi
     fi
+}
+
+###############################################################################
+# Stopps and removes etcd                                                     #
+###############################################################################
+kon::reset_etcd () {
+    info "$(nomad stop etcd)"
+    info "$(consul kv delete -recurse etcd)"
+}
+
+###############################################################################
+# Stopps and removes kubernetes                                               #
+###############################################################################
+kon::reset_kubernetes () {
+    info "$(nomad stop kube-control-plane)"
+    info "$(nomad stop kubelet)"
+    info "$(consul kv delete -recurse kubernetes)"
 }
 
 bootstrap::run_object_store () {
@@ -179,7 +208,7 @@ bootstrap::upload_bundle () {
     mc -q cp $BOOTSTRAP_K8S_CONFIG_BUNDLE $OBJECT_STORE/$BUCKET
 }
 
-bootstrap::run_etcd () {
+kon::load_etcd_config () {
     
     if [ "$ETCD_SERVERS" == "" ]; then
         err "ETCD_SERVERS is not set"
@@ -199,11 +228,6 @@ bootstrap::run_etcd () {
     consul::put "etcd/servers" "$ETCD_SERVERS"
     consul::put "etcd/initial-cluster" "$ETCD_INITIAL_CLUSTER"
     consul::put "etcd/initial-cluster-token" "$ETCD_INITIAL_CLUSTER_TOKEN"
-
-    info "Submitting job etcd to Nomad..."
-    #info "$(nomad run ${JOBDIR}/etcd.nomad)"
-    info "Job submited"
-
 }
 
 bootstrap::run_kubelet () {
@@ -220,20 +244,163 @@ bootstrap::run_kube-control-plane () {
     log "Job submited"
 }
 
+###############################################################################
+# Commands                                                                    #
+###############################################################################
+enable-dns () {
+    kon::check_root
+    consul::enable_dns
+}
+
+generate-certificates () {
+    kon::check_root
+    kon::load_config
+    kon::generate_certificates
+}
+
+generate-kubeconfigs () {
+    kon::check_root
+    kon::load_config
+    kon::generate_kubeconfigs
+}
+
+generate-etcd () {
+    kon::check_root
+    kon::load_config
+    kon::load_etcd_config
+}
+
+generate-all () {
+    kon::check_root
+    kon::load_config
+    kon::load_etcd_config
+    kon::generate_certificates
+    kon::generate_kubeconfigs
+}
+
+reset-all () {
+    kon::reset_kubernetes
+    kon::reset_etcd
+}
+
+reset-etcd () {
+    kon::reset_etcd
+}
+
+reset-kubernetes () {
+    kon::reset_kubernetes
+}
+
+start-all () {
+  info "Starting etcd"
+  start-etcd
+  sleep 5
+  start-kubelet
+  sleep 5
+  start-control-plane
+}
+
+start-etcd () {
+    info "Starting etcd ..."
+    info "$(nomad run $JOBDIR/etcd.nomad)"
+    sleep 5
+    info "Etcd job status after 5 sec:\n$(nomad job status etcd)"
+}
+
+start-kubelet () {
+    info "Starting kubelet ..."
+    info "$(nomad run $JOBDIR/kubelet.nomad)"
+    sleep 5
+    info "Kubelet job status after 5 sec:\n$(nomad job status kubelet)"
+}
+
+start-control-plane () {
+    info "Starting kubernetes control plane ..."
+    info "$(nomad run $JOBDIR/kube-control-plane.nomad)"
+    sleep 5
+    info "Kubernetes control plane job status after 5 sec:\n$(nomad job status kube-control-plane)"
+}
+
+addon-kube-proxy () {
+    WORKDIR=/tmp/.kon 
+    mkdir -p $WORKDIR
+    KUBE_CONFIG=$WORKDIR/kubeconfig.conf
+    consul kv get kubernetes/admin/kubeconfig > $WORKDIR/kubeconfig.conf
+    kubeadm alpha phase addon kube-proxy --kubeconfig=$KUBE_CONFIG --kubernetes-version=$K8S_VERSION
+    kubectl -n kube-system patch cm kube-proxy -p '{"spec":{"unschedulable":true}}'
+}
+
+setup-kubectl () {
+    mkdir -p ~/.kube
+    consul kv get kubernetes/admin/kubeconfig > ~/.kube/config
+    if [ $? -eq 0 ]; then
+        info "Successfully configured kubectl"
+    else
+        err "Failed to configure kubectl"
+    fi
+}
+###############################################################################
+# Main function                                                               #
+###############################################################################
+kon::main () {
+    kon::check_root
+    kon::load_config
+    kon::generate_certificates
+    kon::generate_kubeconfigs
+    bootstrap::run_etcd
+}
+
+kon::help () {
+    cat <<EOF
+    
+KON helps you setup and run Kubernetes On Nomad.
+
+Generate Commands:
+  generate all             Generates certificates and kubeconfigs.
+  generate etcd            Reads the etcd configuration and stores it in consul.
+  generate certificates    Generates all certificates and stores them in consul. The command only generates missing certificates and is safe to be run multiple times.
+  generate kubeconfigs     Generates all kubeconfig-files and stores them in consul.
+
+Start Commands:
+  start all
+  start etcd
+  start kubelet
+  start control-plane
+
+Reset Commands:
+  reset all                Stopps all running jobs and deletes all certificates and configuration.
+  reset etcd               Stopps etcd and deletes all configuration.
+  reset kubernetes         Stopps kubernetes control plane and deletes all certificates and configuration.
+  
+
+Other Commands:
+  enable dns               Enables service lookup in consul using the hosts resolv.conf.
+  addon kube-proxy         Installs the kube-proxy addon
+  setup kubectl
+
+EOF
+}
+
 source $SCRIPTDIR/common.sh
 source $SCRIPTDIR/kon_common.sh
 source $SCRIPTDIR/consul_install.sh
 
-common::check_root
-kon::load_config
+cat $SCRIPTDIR/banner.txt
+if [ "_$1" = "_" ]; then
+    kon::help
+else
+    CMD=
+    if [ '$(kon::help|grep "${@})"' == '' ]; then
+        kon::help
+    else
+        "$(echo $@ | sed 's/ /-/g')"
+        result=$?
+        if [ $result -eq 127 ]; then
+            err "Command not found!"
+            kon::help
+        fi
+    fi
+fi
 
-#bootstrap::run_object_store
-#log "Waiting for object store to start..."
-#sleep 5
-#log "Continuing ..."
-
-kon::generate_certificates
-kon::generate_kubeconfigs
-bootstrap::run_etcd
 
 

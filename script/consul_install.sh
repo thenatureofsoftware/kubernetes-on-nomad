@@ -29,8 +29,13 @@ consul::enable_dns () {
     iptables -t nat -A OUTPUT -d localhost -p udp -m udp --dport 53 -j REDIRECT --to-ports 8600
     iptables -t nat -A OUTPUT -d localhost -p tcp -m tcp --dport 53 -j REDIRECT --to-ports 8600
     
-    printf "\n#Using consul and consul recursors\nnameserver 127.0.0.1\n" >> /etc/resolvconf/resolv.conf.d/head
-    resolvconf -u
+    USING_CONSUL=$(cat /etc/resolvconf/resolv.conf.d/head | grep "#Using consul")
+    if [ "${USING_CONSUL}" == "" ]; then
+        info "Adding 127.0.0.1 as nameserver"
+        printf "\n#Using consul and consul recursors\nnameserver 127.0.0.1\n" >> /etc/resolvconf/resolv.conf.d/head
+        resolvconf -u
+        systemctl stop systemd-resolved
+    fi
 
     info "Consul DNS recursors:\n$(cat $BASEDIR/consul/consul.json | jq '.recursors')"
     info "Now using consul as nameserver"

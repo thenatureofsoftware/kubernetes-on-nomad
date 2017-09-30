@@ -15,10 +15,10 @@ err () {
 common::log () {
     DATE='date +%Y/%m/%d:%H:%M:%S'
     if [ $# -lt 2 ]; then
-        printf "["`$DATE`" kubernetes-on-nomad $(hostname) Info] $1\n" | awk '{$1=$1};1' | tee -a $BASEDIR/kubernetes-on-nomad.log
+        printf "["`$DATE`" Info] $1\n" | awk '{$1=$1};1' | tee -a $KON_LOG_FILE
     else
         MSG="$2 $3 $4 $5 $6 $7 $8 $9"
-        printf "["`$DATE`" kubernetes-on-nomad $(hostname) $1] $MSG\n" | awk '{$1=$1};1' | tee -a $BASEDIR/kubernetes-on-nomad.log
+        printf "["`$DATE`" $1] $MSG\n" | awk '{$1=$1};1' | tee -a $KON_LOG_FILE
     fi
 }
 
