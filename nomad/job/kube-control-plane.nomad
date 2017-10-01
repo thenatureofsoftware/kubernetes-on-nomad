@@ -97,31 +97,31 @@ EOF
 
         volumes = [
           "/etc/ssl/certs:/etc/ssl/certs",
-          "${NOMAD_TASK_DIR}/kubernetes:/etc/kubernetes"
+          "local/kubernetes:/etc/kubernetes"
         ]
 
         command = "kube-apiserver"
         args = [
-                "--proxy-client-cert-file=local/kubernetes/pki/front-proxy-client.crt",
-                "--proxy-client-key-file=local/kubernetes/pki/front-proxy-client.key",
+                "--proxy-client-cert-file=/etc/kubernetes/pki/front-proxy-client.crt",
+                "--proxy-client-key-file=/etc/kubernetes/pki/front-proxy-client.key",
                 "--insecure-port=0",
                 "--requestheader-extra-headers-prefix=X-Remote-Extra-",
-                "--kubelet-client-certificate=local/kubernetes/pki/apiserver-kubelet-client.crt",
-                "--requestheader-client-ca-file=local/kubernetes/pki/front-proxy-ca.crt",
-                "--tls-cert-file=local/kubernetes/pki/apiserver.crt",
-                "--tls-private-key-file=local/kubernetes/pki/apiserver.key",
+                "--kubelet-client-certificate=/etc/kubernetes/pki/apiserver-kubelet-client.crt",
+                "--requestheader-client-ca-file=/etc/kubernetes/pki/front-proxy-ca.crt",
+                "--tls-cert-file=/etc/kubernetes/pki/apiserver.crt",
+                "--tls-private-key-file=/etc/kubernetes/pki/apiserver.key",
                 "--admission-control=Initializers,NamespaceLifecycle,LimitRanger,ServiceAccount,PersistentVolumeLabel,DefaultStorageClass,DefaultTolerationSeconds,NodeRestriction,ResourceQuota",
                 "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname",
                 "--requestheader-username-headers=X-Remote-User",
                 "--requestheader-group-headers=X-Remote-Group",
                 "--requestheader-allowed-names=front-proxy-client",
-                "--kubelet-client-key=local/kubernetes/pki/apiserver-kubelet-client.key",
+                "--kubelet-client-key=/etc/kubernetes/pki/apiserver-kubelet-client.key",
                 "--secure-port=6443",
                 "--allow-privileged=true",
                 "--experimental-bootstrap-token-auth=true",
                 "--service-cluster-ip-range=10.96.0.0/12",
-                "--service-account-key-file=local/kubernetes/pki/sa.pub",
-                "--client-ca-file=local/kubernetes/pki/ca.crt",
+                "--service-account-key-file=/etc/kubernetes/pki/sa.pub",
+                "--client-ca-file=/etc/kubernetes/pki/ca.crt",
                 "--authorization-mode=Node,RBAC",
                 "--advertise-address=${attr.unique.network.ip-address}",
                 "--etcd-servers=${ETCD_SERVERS}"
@@ -187,17 +187,17 @@ EOF
 
         volumes = [
           "/etc/ssl/certs:/etc/ssl/certs",
-          "${NOMAD_TASK_DIR}/kubernetes:/etc/kubernetes"
+          "local/kubernetes:/etc/kubernetes"
         ]
 
         command = "kube-controller-manager"
         args = [
-          "--kubeconfig=local/kubernetes/controller-manager.conf",
-          "--root-ca-file=local/kubernetes/pki/ca.crt",
+          "--kubeconfig=/etc/kubernetes/controller-manager.conf",
+          "--root-ca-file=/etc/kubernetes/pki/ca.crt",
           "--controllers=*,bootstrapsigner,tokencleaner",
-          "--service-account-private-key-file=local/kubernetes/pki/sa.key",
-          "--cluster-signing-cert-file=local/kubernetes/pki/ca.crt",
-          "--cluster-signing-key-file=local/kubernetes/pki/ca.key",
+          "--service-account-private-key-file=/etc/kubernetes/pki/sa.key",
+          "--cluster-signing-cert-file=/etc/kubernetes/pki/ca.crt",
+          "--cluster-signing-key-file=/etc/kubernetes/pki/ca.key",
           "--address=127.0.0.1",
           "--leader-elect=true",
           "--use-service-account-credentials=true"
@@ -245,14 +245,14 @@ EOF
 
         volumes = [
           "/etc/ssl/certs:/etc/ssl/certs",
-          "${NOMAD_TASK_DIR}/kubernetes:/etc/kubernetes"
+          "local/kubernetes:/etc/kubernetes"
         ]
 
         command = "kube-scheduler"
         args = [
           "--address=127.0.0.1",
           "--leader-elect=true",
-          "--kubeconfig=local/kubernetes/scheduler.conf"
+          "--kubeconfig=/etc/kubernetes/scheduler.conf"
         ]
       }
 

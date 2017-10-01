@@ -2,6 +2,8 @@
 
 BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SCRIPTDIR=$BASEDIR/script
+BINDIR=${BINDIR:=/usr/bin}
+
 JOBDIR=$BASEDIR/nomad/job
 K8S_ON_NOMAD_CONFIG_FILE=$BASEDIR/kon.conf
 KON_LOG_FILE=$BASEDIR/kon.log
@@ -28,7 +30,7 @@ kon::check_root () {
 ###############################################################################
 # Loads configuration file                                                    #
 ###############################################################################
-kon::load_config () {
+kon::conf () {
     if [ ! -f "$K8S_ON_NOMAD_CONFIG_FILE" ]; then
         err "$K8S_ON_NOMAD_CONFIG_FILE no such file"
         kon::generate_config_template
@@ -230,6 +232,21 @@ kon::load_etcd_config () {
     consul::put "etcd/initial-cluster-token" "$ETCD_INITIAL_CLUSTER_TOKEN"
 }
 
+kon::load_kube_proxy_config () {
+    if [ "$POD_CLUSTER_CIDR" == "" ]; then
+        err "POD_CLUSTER_CIDR is not set"
+        exit 1
+    fi
+
+    if [ "$KUBE_APISERVER_ADDRESS" == "" ]; then
+        err "KUBE_APISERVER_ADDRESS is not set"
+        exit 1
+    fi
+
+    consul::put "kubernetes/kube-proxy/cluster-cidr" "$POD_CLUSTER_CIDR"
+    consul::put "kubernetes/kube-proxy/master" "$KUBE_APISERVER_ADDRESS"
+}
+
 bootstrap::run_kubelet () {
     log "Submitting job kubelet to Nomad..."
     BOOTSTRAP_K8S_CONFIG_BUNDLE=$(consul kv get kubernetes/config-bundle)
@@ -248,34 +265,27 @@ bootstrap::run_kube-control-plane () {
 # Commands                                                                    #
 ###############################################################################
 enable-dns () {
-    kon::check_root
     consul::enable_dns
 }
 
 generate-certificates () {
-    kon::check_root
-    kon::load_config
     kon::generate_certificates
 }
 
 generate-kubeconfigs () {
-    kon::check_root
-    kon::load_config
+    kon::load_kube_proxy_config
     kon::generate_kubeconfigs
 }
 
 generate-etcd () {
-    kon::check_root
-    kon::load_config
     kon::load_etcd_config
 }
 
 generate-all () {
-    kon::check_root
-    kon::load_config
     kon::load_etcd_config
     kon::generate_certificates
     kon::generate_kubeconfigs
+    kon::load_kube_proxy_config
 }
 
 reset-all () {
@@ -292,10 +302,11 @@ reset-kubernetes () {
 }
 
 start-all () {
-  info "Starting etcd"
   start-etcd
   sleep 5
   start-kubelet
+  sleep 5
+  start-kube-proxy
   sleep 5
   start-control-plane
 }
@@ -304,14 +315,21 @@ start-etcd () {
     info "Starting etcd ..."
     info "$(nomad run $JOBDIR/etcd.nomad)"
     sleep 5
-    info "Etcd job status after 5 sec:\n$(nomad job status etcd)"
+    info "etcd job status after 5 sec:\n$(nomad job status etcd)"
 }
 
 start-kubelet () {
     info "Starting kubelet ..."
     info "$(nomad run $JOBDIR/kubelet.nomad)"
     sleep 5
-    info "Kubelet job status after 5 sec:\n$(nomad job status kubelet)"
+    info "kubelet job status after 5 sec:\n$(nomad job status kubelet)"
+}
+
+start-kube-proxy () {
+    info "Starting kube-proxy ..."
+    info "$(nomad run $JOBDIR/kube-proxy.nomad)"
+    sleep 5
+    info "kube-proxy job status after 5 sec:\n$(nomad job status kube-proxy)"
 }
 
 start-control-plane () {
@@ -322,12 +340,27 @@ start-control-plane () {
 }
 
 addon-kube-proxy () {
+    
     WORKDIR=/tmp/.kon 
     mkdir -p $WORKDIR
     KUBE_CONFIG=$WORKDIR/kubeconfig.conf
     consul kv get kubernetes/admin/kubeconfig > $WORKDIR/kubeconfig.conf
-    kubeadm alpha phase addon kube-proxy --kubeconfig=$KUBE_CONFIG --kubernetes-version=$K8S_VERSION
-    kubectl -n kube-system patch cm kube-proxy -p '{"spec":{"unschedulable":true}}'
+    kubeadm alpha phase addon kube-proxy --kubeconfig=$KUBE_CONFIG --kubernetes-version=$K8S_VERSION --pod-network-cidr=10.244.0.0/16
+    kubectl -n kube-system get cm kube-proxy -o json|jq --raw-output '.data["kubeconfig.conf"]' > $WORKDIR/kubeconfig.conf
+    info "$(kubectl --kubeconfig=$WORKDIR/kubeconfig.conf config set-cluster default --server=$KUBE_APISERVER_ADDRESS)"
+    kubectl -n kube-system delete cm kube-proxy
+    kubectl -n kube-system create cm kube-proxy --from-file=$WORKDIR/kubeconfig.conf
+    kubectl -n kube-system delete pods -l k8s-app=kube-proxy
+    kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.8.0/Documentation/kube-flannel.yml
+    kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.8.0/Documentation/kube-flannel-rbac.yml
+}
+
+addon-dns () {
+    WORKDIR=/tmp/.kon 
+    mkdir -p $WORKDIR
+    KUBE_CONFIG=$WORKDIR/kubeconfig.conf
+    consul kv get kubernetes/admin/kubeconfig > $WORKDIR/kubeconfig.conf
+    kubeadm alpha phase addon kube-dns --kubeconfig=$KUBE_CONFIG  --kubernetes-version=$K8S_VERSION
 }
 
 setup-kubectl () {
@@ -339,21 +372,21 @@ setup-kubectl () {
         err "Failed to configure kubectl"
     fi
 }
-###############################################################################
-# Main function                                                               #
-###############################################################################
-kon::main () {
-    kon::check_root
-    kon::load_config
-    kon::generate_certificates
-    kon::generate_kubeconfigs
-    bootstrap::run_etcd
+
+install-kube () {
+    kubelet::install
 }
 
+###############################################################################
+# Show help                                                                   #
+###############################################################################
 kon::help () {
     cat <<EOF
     
 KON helps you setup and run Kubernetes On Nomad.
+
+Install Commands:
+  install kube             Installs kubernetes components: kubelet, kubeadm and kubectl
 
 Generate Commands:
   generate all             Generates certificates and kubeconfigs.
@@ -365,6 +398,7 @@ Start Commands:
   start all
   start etcd
   start kubelet
+  start kube-proxy
   start control-plane
 
 Reset Commands:
@@ -375,21 +409,38 @@ Reset Commands:
 
 Other Commands:
   enable dns               Enables service lookup in consul using the hosts resolv.conf.
-  addon kube-proxy         Installs the kube-proxy addon
-  setup kubectl
+  addon dns                Installs dns addon.
+  setup kubectl            Configures kubectl for accessing the cluster.
 
 EOF
 }
 
+###############################################################################
+# Source                                                                      #
+###############################################################################
 source $SCRIPTDIR/common.sh
 source $SCRIPTDIR/kon_common.sh
 source $SCRIPTDIR/consul_install.sh
+source $SCRIPTDIR/kubelet_install.sh
 
+###############################################################################
+# Check root and load kon.conf                                                               #
+###############################################################################
+kon::check_root
+kon::conf
+
+###############################################################################
+# Display banner                                                              #
+###############################################################################
 cat $SCRIPTDIR/banner.txt
+printf "$(nomad version), $(consul version|grep Consul), Kubernetes $K8S_VERSION, kubeadm $KUBEADM_VERSION\n\n"
+
+###############################################################################
+# Execute command                                                             #
+###############################################################################
 if [ "_$1" = "_" ]; then
     kon::help
 else
-    CMD=
     if [ '$(kon::help|grep "${@})"' == '' ]; then
         kon::help
     else

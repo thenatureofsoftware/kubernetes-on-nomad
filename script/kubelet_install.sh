@@ -5,12 +5,12 @@ kubelet::install () {
     
     apt-get update > /dev/null 2>&1
     apt-get install -y apt-transport-https > /dev/null 2>&1
-    curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+    curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - > /dev/null 2>&1
     cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
     deb http://apt.kubernetes.io/ kubernetes-xenial main
 EOF
     apt-get update > /dev/null 2>&1
-    apt-get install -y kubelet=$K8S_VERSION > /dev/null 2>&1
+    apt-get install -y kubelet=$(echo $K8S_VERSION | sed 's/v//g')-00 > /dev/null 2>&1
     
     #kubelet::download_and_install "kubelet" "$K8S_VERSION"
     kubelet::download_and_install "kubectl" "$K8S_VERSION"

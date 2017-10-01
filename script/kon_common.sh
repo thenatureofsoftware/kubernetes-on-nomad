@@ -10,6 +10,11 @@ kon::generate_config_template () {
 K8S_VERSION=${K8S_VERSION:=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)}
 
 ###############################################################################
+# kubeadm version
+###############################################################################
+KUBEADM_VERSION=${KUBEADM_VERSION:=v1.9.0-alpha.1}
+
+###############################################################################
 # List of comma separated addresses <scheme>://<ip>:<port>
 ###############################################################################
 ETCD_SERVERS=http://127.0.0.1:2379
@@ -38,6 +43,35 @@ KUBE_APISERVER=192.168.0.1
 KUBE_APISERVER_PORT=6443
 KUBE_APISERVER_EXTRA_SANS=kubernetes.service.dc1.consul,kubernetes.service.dc1,kubernetes.service
 KUBE_APISERVER_ADDRESS=https://kubernetes.service.dc1.consul:6443
+
+# Weave
+#POD_CLUSTER_CIDR=10.32.0.0/16
+# Flannel
+POD_CLUSTER_CIDR=10.244.0.0/16
+
+EOF
+}
+
+kon::kube-proxy-conf () {
+    cat <<EOF
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+  certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    server: https://10.0.2.15:6443
+    name: default
+    contexts:
+    - context:
+      cluster: default
+      namespace: default
+      user: default
+      name: default
+      current-context: default
+      users:
+      - name: default
+        user:
+        tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
 
 EOF
 }
