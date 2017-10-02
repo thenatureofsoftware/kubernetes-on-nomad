@@ -12,7 +12,7 @@ job "etcd" {
   }
 
 
-  group "etcd-servers" {
+  group "etcd-grp" {
     count = 1
 
     constraint {
@@ -36,7 +36,7 @@ job "etcd" {
       size = 500
     }
 
-    task "server" {
+    task "etcd" {
       driver = "docker"
 
       template {
@@ -54,8 +54,7 @@ EOH
 
         volumes = [
           "/etc/ssl/certs:/etc/ssl/certs",
-          "${NOMAD_TASK_DIR}/kubernetes:/etc/kubernetes",
-          "${NOMAD_ALLOC_DIR}/data:/var/lib/etcd"
+          "local/data:/var/lib/etcd"
         ]
 
         command = "etcd"
@@ -65,8 +64,8 @@ EOH
           "--listen-peer-urls", "http://${attr.unique.network.ip-address}:2380",
           "--listen-client-urls", "http://${attr.unique.network.ip-address}:2379,http://127.0.0.1:2379",
           "--advertise-client-urls", "http://${attr.unique.network.ip-address}:2379",
-          "--initial-cluster-token", "${ETCD_INITIAL_CLUSTER_TOKEN}",
-          "--initial-cluster", "${ETCD_INITIAL_CLUSTER}",
+        #  "--initial-cluster-token", "${ETCD_INITIAL_CLUSTER_TOKEN}",
+        #  "--initial-cluster", "${ETCD_INITIAL_CLUSTER}",
           "--initial-cluster-state", "new",
           "--data-dir", "/var/lib/etcd"
         ]

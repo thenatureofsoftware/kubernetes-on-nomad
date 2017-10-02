@@ -1,7 +1,8 @@
 #!/bin/bash
 
 kon::generate_config_template () {
-    cat <<EOF > $K8S_ON_NOMAD_CONFIG_FILE
+  info "Generating sample configuration file $KON_CONFIG"
+  cat <<EOF > $KON_CONFIG
 #!/bin/bash
 
 ###############################################################################

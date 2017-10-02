@@ -1,21 +1,47 @@
 #!/bin/bash
 
+# Installation directory for all scripts.
+KON_INSTALL_DIR=${INSTALL_DIR:=/etc/kon}
+
+# Should be the same as KON_INSTALL_DIR.
 BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SCRIPTDIR=$BASEDIR/script
 BINDIR=${BINDIR:=/usr/bin}
-
 JOBDIR=$BASEDIR/nomad/job
-K8S_ON_NOMAD_CONFIG_FILE=$BASEDIR/kon.conf
-KON_LOG_FILE=$BASEDIR/kon.log
+
+KON_CONFIG=${KON_CONFIG:=$BASEDIR/kon.conf}
+KON_LOG_FILE=/var/log/kon.log
 K8S_CONFIGDIR=${K8S_CONFIGDIR:=/etc/kubernetes}
 K8S_PKIDIR=${K8S_PKIDIR:=$K8S_CONFIGDIR/pki}
-
 
 MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:=9B4T6UOOQNQRRHSAWVPY}
 MINIO_SECRET_KEY=${MINIO_SECRET_KEY:=HtcN68VAx0Ty5UslYokP6UA3OBfWVMFDZX6aJIfh}
 OBJECT_STORE="kube-store"
 BUCKET="resources"
 ETCD_SERVERS=${ETCD_SERVERS:=""}
+
+###############################################################################
+# Installs kon scripts                                                        #
+###############################################################################
+kon::install_script () {
+    TARGET=$KON_INSTALL_DIR
+    printf "%s\n" "Installing kubernetes-on-nomad to directory: $TARGET"
+    if [ -d "$TARGET/script" ] || [ -f "$TARGET/kon.sh" ]; then
+        printf "%s\n" "Error: target directory: $TARGET is not empty!"
+        return 1
+    fi
+    
+    mkdir -p $TARGET/script
+    cp $SCRIPTDIR/* $TARGET/script
+    
+    mkdir -p $TARGET/nomad/job
+    cp $JOBDIR/*.nomad $TARGET/nomad/job
+
+    cp $BASEDIR/kon.sh $TARGET/
+
+    chmod a+x $TARGET/script/*.sh
+    chmod a+x $TARGET/kon.sh
+}
 
 ###############################################################################
 # Checks that the script is run as root                                       #
@@ -30,13 +56,13 @@ kon::check_root () {
 ###############################################################################
 # Loads configuration file                                                    #
 ###############################################################################
-kon::conf () {
-    if [ ! -f "$K8S_ON_NOMAD_CONFIG_FILE" ]; then
-        err "$K8S_ON_NOMAD_CONFIG_FILE no such file"
+kon::config () {
+    if [ ! -f "$KON_CONFIG" ]; then
+        err "$KON_CONFIG no such file"
         kon::generate_config_template
         exit 1
     fi
-    source $K8S_ON_NOMAD_CONFIG_FILE
+    source $KON_CONFIG
 }
 
 ###############################################################################
@@ -423,11 +449,23 @@ source $SCRIPTDIR/kon_common.sh
 source $SCRIPTDIR/consul_install.sh
 source $SCRIPTDIR/kubelet_install.sh
 
-###############################################################################
-# Check root and load kon.conf                                                               #
-###############################################################################
 kon::check_root
-kon::conf
+
+if [ "$1" == "install_script" ]; then
+    kon::install_script
+    if [ $? -gt 0 ]; then
+        printf "%s\n" "Error: failed to install script!"
+        exit 1
+    else
+        printf "%s\n" "Script installed successfully!"
+        exit 0
+    fi
+fi
+
+###############################################################################
+# Check root and load kon.conf                                                #
+###############################################################################
+kon::config
 
 ###############################################################################
 # Display banner                                                              #
@@ -436,22 +474,55 @@ cat $SCRIPTDIR/banner.txt
 printf "$(nomad version), $(consul version|grep Consul), Kubernetes $K8S_VERSION, kubeadm $KUBEADM_VERSION\n\n"
 
 ###############################################################################
+# Parse arguments and configuration                                           #
+###############################################################################
+while :; do
+    case $1 in
+        -h|-\?|--help)
+            kon::help    # Display a usage synopsis.
+            exit
+            ;;
+        -c|--config)     # Takes an option argument; ensure it has been specified.
+            if [ "$2" ]; then
+                KON_CONFIG=$2
+                shift 2
+                break
+            else
+                err "--config requires a non-empty option argument."
+                exit 1
+            fi
+            ;;
+        --config=?*)
+            KON_CONFIG=${1#*=} # Delete everything up to "=" and assign the remainder.
+            shift
+            break
+            ;;
+        --config=)       # Handle the case of an empty --file=
+            err "--config requires a non-empty option argument."
+            exit 1
+            ;;
+        *)
+        break
+    esac
+
+    shift
+done
+
+###############################################################################
 # Execute command                                                             #
 ###############################################################################
-if [ "_$1" = "_" ]; then
+if [[ "$@_" == "_" ]]; then
     kon::help
 else
-    if [ '$(kon::help|grep "${@})"' == '' ]; then
+    "$(echo $@ | sed 's/ /-/g')"
+    result=$?
+    if [ $result -eq 127 ]; then
+        err "Command not found!"
         kon::help
-    else
-        "$(echo $@ | sed 's/ /-/g')"
-        result=$?
-        if [ $result -eq 127 ]; then
-            err "Command not found!"
-            kon::help
-        fi
     fi
 fi
+
+
 
 
 
