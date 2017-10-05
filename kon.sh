@@ -6,13 +6,19 @@ KON_INSTALL_DIR=${INSTALL_DIR:=/etc/kon}
 # Should be the same as KON_INSTALL_DIR.
 BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SCRIPTDIR=$BASEDIR/script
-BINDIR=${BINDIR:=/usr/bin}
+BINDIR=${BINDIR:=/opt/bin}
 JOBDIR=$BASEDIR/nomad/job
 
-KON_CONFIG=${KON_CONFIG:=$BASEDIR/kon.conf}
+KON_CONFIG=$KON_INSTALL_DIR/kon.conf
 KON_LOG_FILE=/var/log/kon.log
 K8S_CONFIGDIR=${K8S_CONFIGDIR:=/etc/kubernetes}
 K8S_PKIDIR=${K8S_PKIDIR:=$K8S_CONFIGDIR/pki}
+
+# Consul
+CONSUL_VERSION=${CONSUL_VERSION:=0.9.3}
+
+# Nomad
+NOMAD_VERSION=${NOMAD_VERSION:=0.6.3}
 
 MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:=9B4T6UOOQNQRRHSAWVPY}
 MINIO_SECRET_KEY=${MINIO_SECRET_KEY:=HtcN68VAx0Ty5UslYokP6UA3OBfWVMFDZX6aJIfh}
@@ -48,7 +54,7 @@ kon::install_script () {
 ###############################################################################
 kon::check_root () {
     if [[ $EUID -ne 0 ]]; then
-        err "This script must be run as root"
+        error "This script must be run as root"
         exit 1
     fi
 }
@@ -57,12 +63,15 @@ kon::check_root () {
 # Loads configuration file                                                    #
 ###############################################################################
 kon::config () {
-    if [ ! -f "$KON_CONFIG" ]; then
-        err "$KON_CONFIG no such file"
-        kon::generate_config_template
-        exit 1
+    mkdir -p $KON_INSTALL_DIR
+    info "Config args: $_arg_config"
+    if [ ! "$_arg_config" == "" ] && [ -f "$_arg_config" ]; then
+        info "Loading configuration from $_arg_config"
+        source $_arg_config
+    elif [ -f "$KON_CONFIG" ]; then
+        info "Loading configuration from $KON_CONFIG" 
+        source $KON_CONFIG
     fi
-    source $KON_CONFIG
 }
 
 ###############################################################################
@@ -239,17 +248,17 @@ bootstrap::upload_bundle () {
 kon::load_etcd_config () {
     
     if [ "$ETCD_SERVERS" == "" ]; then
-        err "ETCD_SERVERS is not set"
+        error "ETCD_SERVERS is not set"
         exit 1
     fi
 
     if [ "$ETCD_INITIAL_CLUSTER" == "" ]; then
-        err "ETCD_INITIAL_CLUSTER is not set"
+        error "ETCD_INITIAL_CLUSTER is not set"
         exit 1
     fi
 
     if [ "$ETCD_INITIAL_CLUSTER_TOKEN" == "" ]; then
-        err "ETCD_INITIAL_CLUSTER_TOKEN is not set"
+        error "ETCD_INITIAL_CLUSTER_TOKEN is not set"
         exit 1
     fi
 
@@ -260,12 +269,12 @@ kon::load_etcd_config () {
 
 kon::load_kube_proxy_config () {
     if [ "$POD_CLUSTER_CIDR" == "" ]; then
-        err "POD_CLUSTER_CIDR is not set"
+        error "POD_CLUSTER_CIDR is not set"
         exit 1
     fi
 
     if [ "$KUBE_APISERVER_ADDRESS" == "" ]; then
-        err "KUBE_APISERVER_ADDRESS is not set"
+        error "KUBE_APISERVER_ADDRESS is not set"
         exit 1
     fi
 
@@ -395,7 +404,7 @@ setup-kubectl () {
     if [ $? -eq 0 ]; then
         info "Successfully configured kubectl"
     else
-        err "Failed to configure kubectl"
+        error "Failed to configure kubectl"
     fi
 }
 
@@ -403,53 +412,86 @@ install-kube () {
     kubelet::install
 }
 
-###############################################################################
-# Show help                                                                   #
-###############################################################################
-kon::help () {
-    cat <<EOF
+install-consul () {
+    consul::install
+}
+
+install-nomad () {
+    nomad::install
+}
+
+start-bootstrap-consul() {
+    if [ -z $(which consul) ]; then
+        error "Please install Consul binaries first (kon install consul)"
+        exit 1
+    fi
+
+    if [ "$(docker ps -f 'name=kon-consul' --format '{{.Names}}')" == "kon-consul" ]; then
+        info "Bootstrap Consul is already running"
+    else 
+        consul::start-bootstrap
+        consul::wait_for_started
+    fi
+
+    if [ -f "$_arg_config" ]; then
+        config_file=$_arg_config
+    else
+        config_file=$KON_CONFIG
+    fi
+    consul::put_file kon/config $config_file
+}
+
+start-consul () {
+    if [ -z $(which consul) ]; then
+        error "Please install Consul binaries first (kon install consul)"
+        exit 1
+    fi
     
-KON helps you setup and run Kubernetes On Nomad.
+    if [ ! "$_arg_bootstrap" == "" ]; then
+        KON_BOOTSTRAP_SERVER=$_arg_bootstrap
+    fi
 
-Install Commands:
-  install kube             Installs kubernetes components: kubelet, kubeadm and kubectl
+    if [ "$KON_BOOTSTRAP_SERVER" == "" ]; then
+        error "Consul Bootstrap server address required. Please set KON_BOOTSTRAP_SERVER in config or --bootstrap <value> argument"
+        exit 1
+    fi
+    info "Bootstrap server address: $KON_BOOTSTRAP_SERVER"
 
-Generate Commands:
-  generate all             Generates certificates and kubeconfigs.
-  generate etcd            Reads the etcd configuration and stores it in consul.
-  generate certificates    Generates all certificates and stores them in consul. The command only generates missing certificates and is safe to be run multiple times.
-  generate kubeconfigs     Generates all kubeconfig-files and stores them in consul.
+    if [ "$(docker ps -f 'name=kon-consul' --format '{{.Names}}')" == "kon-consul" ]; then
+        info "Consul is already running"
+    else 
+        consul::start
+        consul::wait_for_started
+    fi
 
-Start Commands:
-  start all
-  start etcd
-  start kubelet
-  start kube-proxy
-  start control-plane
-
-Reset Commands:
-  reset all                Stopps all running jobs and deletes all certificates and configuration.
-  reset etcd               Stopps etcd and deletes all configuration.
-  reset kubernetes         Stopps kubernetes control plane and deletes all certificates and configuration.
-  
-
-Other Commands:
-  enable dns               Enables service lookup in consul using the hosts resolv.conf.
-  addon dns                Installs dns addon.
-  setup kubectl            Configures kubectl for accessing the cluster.
-
-EOF
+    if [ ! -f "$KON_CONFIG" ]; then
+        mkdir -p $KON_INSTALL_DIR
+        info "Reading config from Consul"
+        info "$(consul kv get kon/config > $KON_CONFIG)"
+        if [ $? -eq 0 ] && [ -f "$KON_CONFIG" ]; then
+            info "Reloading configuration from Consul."
+            source $KON_CONFIG
+            info "Restarting Consul after new configuration"
+            consul::stop
+            consul::start
+            consul::wait_for_started
+        fi
+    fi
 }
 
 ###############################################################################
 # Source                                                                      #
 ###############################################################################
+source $SCRIPTDIR/arguments.sh
 source $SCRIPTDIR/common.sh
 source $SCRIPTDIR/kon_common.sh
-source $SCRIPTDIR/consul_install.sh
+source $SCRIPTDIR/consul.sh
+source $SCRIPTDIR/nomad.sh
 source $SCRIPTDIR/kubelet_install.sh
 
+# Move to stage 1 init funcion
 kon::check_root
+common::mk_bindir
 
 if [ "$1" == "install_script" ]; then
     kon::install_script
@@ -462,65 +504,53 @@ if [ "$1" == "install_script" ]; then
     fi
 fi
 
-###############################################################################
-# Check root and load kon.conf                                                #
-###############################################################################
-kon::config
 
-###############################################################################
-# Display banner                                                              #
-###############################################################################
 cat $SCRIPTDIR/banner.txt
 printf "$(nomad version), $(consul version|grep Consul), Kubernetes $K8S_VERSION, kubeadm $KUBEADM_VERSION\n\n"
 
 ###############################################################################
-# Parse arguments and configuration                                           #
+# Parse arguments                                                             #
 ###############################################################################
-while :; do
-    case $1 in
-        -h|-\?|--help)
-            kon::help    # Display a usage synopsis.
-            exit
-            ;;
-        -c|--config)     # Takes an option argument; ensure it has been specified.
-            if [ "$2" ]; then
-                KON_CONFIG=$2
-                shift 2
-                break
-            else
-                err "--config requires a non-empty option argument."
-                exit 1
-            fi
-            ;;
-        --config=?*)
-            KON_CONFIG=${1#*=} # Delete everything up to "=" and assign the remainder.
-            shift
-            break
-            ;;
-        --config=)       # Handle the case of an empty --file=
-            err "--config requires a non-empty option argument."
-            exit 1
-            ;;
-        *)
-        break
-    esac
+parse_commandline "$@"
+handle_passed_args_count
+assign_positional_args
 
-    shift
-done
+###############################################################################
+# Load configuration                                                          #
+###############################################################################
+kon::config
 
+log "Config: $KON_CONFIG"
+log "Binaries: $BINDIR"
+
+# OTHER STUFF GENERATED BY Argbash
+
+### END OF CODE GENERATED BY Argbash (sortof) ### ])
+# [ <-- needed because of Argbash
+
+
+if [ "$_arg_print" = on ]
+then
+  echo "Command arg value: '${_arg_command[*]}'"
+  echo "Optional arg '--config|-c' value: '$_arg_config'"
+  echo "Optional arg '--bootstrap|-b' value: '$_arg_bootstrap'"
+else
+  echo "Not telling anything, print not requested"
+fi
+
+# ] <-- needed because of Argbash
+
+info "Command line args: $1 $2 $3 $4 $5"
 ###############################################################################
 # Execute command                                                             #
 ###############################################################################
-if [[ "$@_" == "_" ]]; then
+"$(echo ${_arg_command[*]} | sed 's/ /-/g')"
+result=$?
+if [ $result -eq 127 ]; then
+    error "Command not found!"
     kon::help
-else
-    "$(echo $@ | sed 's/ /-/g')"
-    result=$?
-    if [ $result -eq 127 ]; then
-        err "Command not found!"
-        kon::help
-    fi
 fi
+
 
 
 

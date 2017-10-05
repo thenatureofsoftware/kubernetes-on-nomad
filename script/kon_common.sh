@@ -2,6 +2,7 @@
 
 kon::generate_config_template () {
   info "Generating sample configuration file $KON_CONFIG"
+  mkdir -p $KON_INSTALL_DIR
   cat <<EOF > $KON_CONFIG
 #!/bin/bash
 
@@ -14,6 +15,13 @@ K8S_VERSION=${K8S_VERSION:=$(curl -s https://storage.googleapis.com/kubernetes-r
 # kubeadm version
 ###############################################################################
 KUBEADM_VERSION=${KUBEADM_VERSION:=v1.9.0-alpha.1}
+
+###############################################################################
+# Consul Bootstrap server
+###############################################################################
+KON_BOOTSTRAP_SERVER=192.168.1.101
+KON_BIND_INTERFACE=enp0s8
+KON_SERVERS=172.17.4.101,172.17.4.102,172.17.4.103
 
 ###############################################################################
 # List of comma separated addresses <scheme>://<ip>:<port>

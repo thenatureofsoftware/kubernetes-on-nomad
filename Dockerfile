@@ -8,6 +8,7 @@ RUN apk add --no-cache bash \
 COPY kon.sh /kon/
 COPY script /kon/script/
 COPY nomad/job /kon/nomad/job/
+COPY nomad/*.* /kon/nomad/
 
 VOLUME [ "/etc/kon" ]
 

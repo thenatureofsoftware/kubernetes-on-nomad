@@ -4,3 +4,4 @@ kon.conf
 setup.env
 *.log
 kubernetes_config.tar.gz
+examples
