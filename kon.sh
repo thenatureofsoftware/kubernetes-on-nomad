@@ -64,13 +64,21 @@ kon::check_root () {
 ###############################################################################
 kon::config () {
     mkdir -p $KON_INSTALL_DIR
+    avtive_config=""
+    
     info "Config args: $_arg_config"
     if [ ! "$_arg_config" == "" ] && [ -f "$_arg_config" ]; then
-        info "Loading configuration from $_arg_config"
-        source $_arg_config
+        active_config=$_arg_config
     elif [ -f "$KON_CONFIG" ]; then
-        info "Loading configuration from $KON_CONFIG" 
-        source $KON_CONFIG
+        active_config=$KON_CONFIG
+    fi
+
+    if [ ! "$active_config" == "" ]; then
+        info "Loading configuration from $active_config"
+        source $active_config
+        if [ "$KON_SAMPLE_CONFIG" == "true" ]; then
+            fail "Can't use a sample configuration, please edit /etc/kon/kon.conf"
+        fi
     fi
 }
 
@@ -297,10 +305,22 @@ bootstrap::run_kube-control-plane () {
 }
 
 ###############################################################################
-# Commands                                                                    #
+# Commands
+#                                                                     #
 ###############################################################################
 enable-dns () {
     consul::enable_dns
+}
+
+###############################################################################
+# Generates sample configuration file                                         #
+###############################################################################
+generate-config () {
+    if [ -f "$KON_CONFIG" ]; then
+        fail "$KON_CONFIG already exists"
+    fi
+    common::generate_config_template
+    info "You can now configure Kubernetes-On-Nomad by editing $KON_CONFIG"
 }
 
 generate-certificates () {
@@ -438,11 +458,12 @@ start-bootstrap-consul() {
     else
         config_file=$KON_CONFIG
     fi
-    consul::put_file kon/config $config_file
+    info "$(consul::put_file kon/config $config_file)"
+    info "$(consul::put kon/nameserver $kon_nameserver)"
 }
 
 start-consul () {
-    if [ -z $(which consul) ]; then
+    if [ -z "$(which consul)" ]; then
         error "Please install Consul binaries first (kon install consul)"
         exit 1
     fi
@@ -466,8 +487,13 @@ start-consul () {
 
     if [ ! -f "$KON_CONFIG" ]; then
         mkdir -p $KON_INSTALL_DIR
+        
+        kon_nameserver=$(consul kv get kon/nameserver)
+        if [ $? -gt 0 ]; then fail "Failed to get nameserver from kon/nameserver"; fi
+
         info "Reading config from Consul"
         info "$(consul kv get kon/config > $KON_CONFIG)"
+
         if [ $? -eq 0 ] && [ -f "$KON_CONFIG" ]; then
             info "Reloading configuration from Consul."
             source $KON_CONFIG

@@ -8,6 +8,7 @@ Install Commands:
   install kube             Installs kubernetes components: kubelet, kubeadm and kubectl
 
 Generate Commands:
+  generate init            Generates a sample /etc/kon.conf file
   generate all             Generates certificates and kubeconfigs.
   generate etcd            Reads the etcd configuration and stores it in consul.
   generate certificates    Generates all certificates and stores them in consul. The command only generates missing certificates and is safe to be run multiple times.

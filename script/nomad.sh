@@ -19,6 +19,7 @@ nomad::install () {
 }
 
 nomad::deploy_service_unit () {
+    mkdir -p /etc/nomad
     log "OS: $(common::os)"
     nomad_service_unit_file=$(nomad::resolve_nomad_service_unit_file)
     nomad::service_template $nomad_service_unit_file

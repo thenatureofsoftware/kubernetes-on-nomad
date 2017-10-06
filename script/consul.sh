@@ -1,12 +1,16 @@
 #!/bin/sh
 
 consul::install () {
-    common::mk_bindir
     wget --quiet https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip
+    if [ $? -gt 0 ]; then fail "Failed to download Consul ${NOMAD_VERSION}"; fi
+
+    common::mk_bindir
+
     tmpdir=$(mktemp -d kon.XXXXXX)
     unzip -d $tmpdir consul_${CONSUL_VERSION}_linux_amd64.zip
     mv $tmpdir/consul ${BINDIR}/
     rm -f consul_${CONSUL_VERSION}_linux_amd64.zip*
+    
     consul version > /dev/null 2>&1
     if [ $? -eq 0 ]; then
         info "$(consul version|grep Consul) installed"
@@ -40,36 +44,64 @@ EOF
 }
 
 consul::start-bootstrap () {
+    # Save the current nameserver
+    kon_nameserver=$(cat /etc/resolv.conf | grep nameserver | head -1 | awk '{print $2}')
+    if [ "$kon_nameserver" == "" ] || [ "$kon_nameserver" == "127.0.0.1" ]; then
+        fail "Invalid nameserver for consul recursors: $kon_nameserver"
+    fi
+
     info "Starting Consul ..."
     consul::bind_interface
     docker run -d --name kon-consul \
+    --restart=always \
     --network=host \
+    --memory=500m \
+    -v /var/lib/consul:/consul/data \
     -e 'CONSUL_ALLOW_PRIVILEGED_PORTS=true' \
     -e 'CONSUL_CLIENT_INTERFACE=lo' \
     -e "CONSUL_BIND_INTERFACE=$CONSUL_BIND_INTERFACE" \
-    consul:$CONSUL_VERSION agent -server -dns-port=53 -bootstrap-expect=1
+    consul:$CONSUL_VERSION agent -server \
+    -dns-port=53 \
+    -recursor=$kon_nameserver \
+    -bootstrap-expect=1
+
+    info "Switching nameserver to consul"
+    consul::resolvconf
 }
 
 consul::start () {
 
-    info "Is server: $(common::is_server), server list: $KON_SEVERS, ip address: $(common::ip_addr)"
+    if [ -z "$KON_SEVERS"]; then
+        info "Is server: $(common::is_server), server list: $KON_SEVERS, ip address: $(common::ip_addr)"
+    fi
+
     if [ "$(common::is_server)" == "true" ]; then
         agent_type="agent -server"
     else
         agent_type="agent"
     fi
 
+    if [ "$kon_nameserver" == "" ]; then
+        kon_nameserver=$(cat /etc/resolv.conf | grep nameserver | head -1 | awk '{print $2}')
+        if [ "$kon_nameserver" == "" ] || [ "$kon_nameserver" == "127.0.0.1" ]; then
+            fail "Invalid nameserver for consul recursors: $kon_nameserver"
+        fi
+    fi
+
     info "Starting Consul $agent_type ..."
     consul::bind_interface
 
     docker run -d --name kon-consul \
+    --restart=always \
     --network=host \
+    --memory=500m \
+    -v /var/lib/consul:/consul/data \
     -e 'CONSUL_ALLOW_PRIVILEGED_PORTS=true' \
     -e 'CONSUL_CLIENT_INTERFACE=lo' \
     -e "CONSUL_BIND_INTERFACE=$CONSUL_BIND_INTERFACE" \
     consul:$CONSUL_VERSION $agent_type \
     -dns-port=53 \
-    -recursor=$(cat /etc/resolv.conf | grep nameserver | head -1 | awk '{print $2}') \
+    -recursor=$kon_nameserver \
     -retry-join=$KON_BOOTSTRAP_SERVER
 
     info "Switching nameserver to consul"

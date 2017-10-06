@@ -4,4 +4,6 @@ kon.conf
 setup.env
 *.log
 kubernetes_config.tar.gz
-examples
+examples/*.img
+examples/*.vmdk
+examples/config.ign.merged
