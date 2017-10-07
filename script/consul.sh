@@ -1,21 +1,26 @@
 #!/bin/sh
 
+###############################################################################
+# Installs Consul
+###############################################################################
 consul::install () {
+    # Download Consul
     wget --quiet https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip
-    if [ $? -gt 0 ]; then fail "Failed to download Consul ${NOMAD_VERSION}"; fi
+    if [ $? -gt 0 ]; then fail "Failed to download Consul ${CONSUL_VERSION}"; fi
 
     common::mk_bindir
-
+    
     tmpdir=$(mktemp -d kon.XXXXXX)
     unzip -d $tmpdir consul_${CONSUL_VERSION}_linux_amd64.zip
     mv $tmpdir/consul ${BINDIR}/
     rm -f consul_${CONSUL_VERSION}_linux_amd64.zip*
     
+    # Check consul is working
     consul version > /dev/null 2>&1
     if [ $? -eq 0 ]; then
         info "$(consul version|grep Consul) installed"
     else
-        error "Consull install failed!"
+        fail "Consull install failed!"
     fi
 }
 
@@ -31,16 +36,40 @@ consul::bind_interface () {
     info "Using bind interface $CONSUL_BIND_INTERFACE"
 }
 
-consul::resolvconf () {
+###############################################################################
+# Creates a resolv.conf that points to Consul and enables it.
+###############################################################################
+consul::enable-consul-dns () {
     if [ -L /etc/resolv.conf ] && [ ! "$(readlink /etc/resolv.conf)" == "/etc/kon/resolv.conf" ]; then
         info "Creating symlink /etc/resolv.conf -> /etc/kon/resolv.conf"
         cat <<EOF > /etc/kon/resolv.conf
 #Using Consul as ns
 nameserver 127.0.0.1    
 EOF
+        # Used to restore DNS config
+        printf "%s" "$(readlink /etc/resolv.conf)" > $KON_INSTALL_DIR/resolv_conf_org
+        
         rm /etc/resolv.conf
         ln -s /etc/kon/resolv.conf /etc/resolv.conf
     fi
+}
+
+###############################################################################
+# Restores the /etc/resolv.conf symbolic link.
+###############################################################################
+consul::disable-consul-dns () {
+    if [ ! -f "$KON_INSTALL_DIR/resolv_conf_org" ]; then
+        fail "No resolv.conf target found, can't restore."
+    fi
+    org_link_target=$(cat $KON_INSTALL_DIR/resolv_conf_org)
+
+    if [ ! -L /etc/resolv.conf ]; then
+        fail "/etc/resolv.conf is'nt a symbolik link, can't restore"
+    fi
+    
+    rm /etc/resolv.conf
+    ln -s $org_link_target /etc/resolv.conf
+    if [ $? -gt 0 ]; then fail "Failed to restore DNS config!"; fi
 }
 
 consul::start-bootstrap () {
@@ -66,7 +95,7 @@ consul::start-bootstrap () {
     -bootstrap-expect=1
 
     info "Switching nameserver to consul"
-    consul::resolvconf
+    consul::enable-consul-dns
 }
 
 consul::start () {
@@ -105,7 +134,7 @@ consul::start () {
     -retry-join=$KON_BOOTSTRAP_SERVER
 
     info "Switching nameserver to consul"
-    consul::resolvconf
+    consul::enable-consul-dns
 }
 
 consul::stop () {
@@ -122,33 +151,6 @@ consul::wait_for_started () {
             break;
         fi 
     done
-} 
-
-consul::enable_service () {
-    log "Adding consul service"
-    systemctl stop consul.service > /dev/null 2>&1
-    systemctl disable consul.service > /dev/null 2>&1
-
-    cp $BASEDIR/consul/consul.service /lib/systemd/system
-    mkdir -p /etc/consul
-    cp $BASEDIR/consul/consul.json /etc/consul
-    
-    systemctl daemon-reload > /dev/null 2>&1
-    systemctl enable consul.service > /dev/null 2>&1
-    systemctl start consul.service > /dev/null 2>&1
-}
-
-consul::enable_dns () {    
-    USING_CONSUL=$(cat /etc/resolvconf/resolv.conf.d/head | grep "#Using consul")
-    if [ "${USING_CONSUL}" == "" ]; then
-        info "Adding 127.0.0.1 as nameserver"
-        printf "\n#Using consul and consul recursors\nnameserver 127.0.0.1\n" >> /etc/resolvconf/resolv.conf.d/head
-        resolvconf -u
-        systemctl stop systemd-resolved
-    fi
-
-    info "Consul DNS recursors:\n$(cat $BASEDIR/consul/consul.json | jq '.recursors')"
-    info "Now using consul as nameserver"
 }
 
 consul::put () {

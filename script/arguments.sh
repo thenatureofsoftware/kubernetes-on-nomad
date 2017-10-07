@@ -190,8 +190,7 @@ then
   echo "Command arg value: '${_arg_command[*]}'"
   echo "Optional arg '--config|-c' value: '$_arg_config'"
   echo "Optional arg '--bootstrap|-b' value: '$_arg_bootstrap'"
-else
-  echo "Not telling anything, print not requested"
+  echo "Optional arg '--interface|-i' value: '$_arg_interface'"
 fi
 
 # ] <-- needed because of Argbash

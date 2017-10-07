@@ -4,6 +4,9 @@ log () {
     common::log "Info" "$1"
 }
 
+###############################################################################
+# Logs info level message
+###############################################################################
 info () {
     common::log "Info" "$1"
 }
@@ -13,7 +16,7 @@ error () {
 }
 
 ###############################################################################
-# Logs a message and exit                                                     #
+# Logs a message and exit
 ###############################################################################
 fail() {
     error "$1"
@@ -21,12 +24,13 @@ fail() {
 }
 
 common::log () {
+    if [ -n $NO_LOG ]; then return; fi
     DATE='date +%Y/%m/%d:%H:%M:%S'
     if [ $# -lt 2 ]; then
-        printf "["`$DATE`" Info] $1\n" | awk '{$1=$1};1' | tee -a $KON_LOG_FILE
+        printf "["`$DATE`" Info] $1\n" | awk '{$1=$1};1' | tee -a > /dev/null 2>&1
     else
         MSG="$2 $3 $4 $5 $6 $7 $8 $9"
-        printf "["`$DATE`" $1] $MSG\n" | awk '{$1=$1};1' | tee -a $KON_LOG_FILE
+        printf "["`$DATE`" $1] $MSG\n" | awk '{$1=$1};1' | tee -a > /dev/null 2>&1
     fi
 }
 
@@ -38,9 +42,15 @@ common::check_root () {
 }
 
 common::check_cmd () {
-    type $1 >/dev/null 2>&1 || { common::log "This script requires $1 but it's not installed. Installing."; common::install $1; }
+    echo "common::check $1"
+    type $1 >/dev/null 2>&1 || {
+        info "This script requires $1 but it's not installed."
+    }
 }
 
+###############################################################################
+# Creates BINDIR if it don't exists and adds it to PATH
+###############################################################################
 common::mk_bindir () {
     if [ ! -d "$BINDIR" ]; then
         mkdir -p $BINDIR
@@ -108,6 +118,8 @@ common::os () {
     echo "$OS"    
 }
 
+function common::join_by { local IFS="$1"; shift; echo "$*"; }
+
 common::generate_config_template () {
   info "Generating sample configuration file $KON_CONFIG"
   mkdir -p $KON_INSTALL_DIR
@@ -134,7 +146,7 @@ KON_SERVERS=172.17.4.101,172.17.4.102,172.17.4.103
 ###############################################################################
 # List of comma separated addresses <scheme>://<ip>:<port>
 ###############################################################################
-ETCD_SERVERS=http://127.0.0.1:2379
+ETCD_SERVERS=http://etcd.service.dc1.consul:2379
 
 ###############################################################################
 # List of etcd initial cluster <name>=<scheme>://<ip>:<port>
@@ -156,7 +168,6 @@ node4=192.168.0.3
 ###############################################################################
 # kube-apiserver advertise address
 ###############################################################################
-KUBE_APISERVER=192.168.0.1
 KUBE_APISERVER_PORT=6443
 KUBE_APISERVER_EXTRA_SANS=kubernetes.service.dc1.consul,kubernetes.service.dc1,kubernetes.service
 KUBE_APISERVER_ADDRESS=https://kubernetes.service.dc1.consul:6443

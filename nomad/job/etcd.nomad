@@ -21,16 +21,6 @@ job "etcd" {
       value   = "etcd"
     }
 
-    restart {
-      # The number of attempts to run the job within the specified interval.
-      attempts = 10
-      interval = "5m"
-
-      delay = "25s"
-
-      mode = "delay"
-    }
-
     ephemeral_disk {
       migrate = true
       size = 500
@@ -86,6 +76,13 @@ EOH
         name = "etcd"
         tags = ["global", "etcd"]
         port = "http"
+        check {
+          type = "http"
+          interval = "5s"
+          port = "http"
+          path = "/health"
+          timeout = "15s"
+        }
       }
     }
   }

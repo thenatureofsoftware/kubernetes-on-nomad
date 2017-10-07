@@ -29,13 +29,12 @@ nomad::deploy_service_unit () {
         nomad::server_template "/etc/nomad/server.hcl" "$nomad_advertise_ip"
     else
         info "Generating Nomad client config"
-        nomad::client_template "/etc/nomad/client.hcl" "$nomad_advertise_ip"
+        nomad::client_config "/etc/nomad/client.hcl" "$nomad_advertise_ip"
     fi
     systemctl daemon-reload > /dev/null 2>&1
     systemctl disable nomad.service > /dev/null 2>&1
     systemctl enable nomad.service > /dev/null 2>&1
     systemctl restart nomad.service > /dev/null 2>&1
-
 }
 
 nomad::resolve_nomad_service_unit_file () {
@@ -66,7 +65,42 @@ nomad::enable_service () {
     systemctl restart nomad.service > /dev/null 2>&1
 }
 
-nomad::service_template() {
+###############################################################################
+# Creates a Nomad client config (client.hcl)
+# Param $1 - filename where to write the config
+# Param $2 - Nomad adverties IP-address (only used if) $nomad_advertise_ip
+#            is not set.
+###############################################################################
+nomad::client_config () {
+    # node_class variable
+    node_class=()
+    if [ ! -n "$ETCD_INITIAL_CLUSTER" ]; then fail "ETCD_INITIAL_CLUSTER is not set is KON_CONFIG loaded?"; fi
+    if [ ! -n "$KUBE_MINIONS" ]; then fail "KUBE_MINIONS is not set is KON_CONFIG loaded?"; fi
+
+    # Resolve ip-address
+    if [ ! -n "$nomad_advertise_ip" ]; then
+        if [ ! -n "$2" ]; then fail "nomad_advertise_ip is not set"; else
+            nomad_advertise_ip=$1
+        fi
+    fi
+    info "Configuring Nomad client for IP $nomad_advertise_ip"
+
+    # Check if this is an etcd node
+    if [ -n "$(echo $ETCD_INITIAL_CLUSTER | grep $nomad_advertise_ip)" ]; then
+        node_class+=('etcd')
+    fi
+
+    if [ -n "$(echo $KUBE_MINIONS | grep $nomad_advertise_ip)" ]; then
+        node_class+=('kubelet')
+    fi
+
+    node_class=$(common::join_by , "${node_class[@]}")
+    nomad::client_template $1 "$nomad_advertise_ip" "$node_class"
+
+    _test_=$node_class
+}
+
+nomad::service_template () {
   cat <<EOF > $1
 [Unit]
 Description=Nomad
@@ -84,7 +118,7 @@ EOF
 }
 
 nomad::client_template() {
-  cat <<EOF > $1
+  cat <<EOF > "$1"
 bind_addr = "0.0.0.0"
 data_dir = "/var/lib/nomad/"
 advertise {
@@ -94,8 +128,9 @@ advertise {
 }
 client {
   enabled = true
+  network_interface = "$KON_BIND_INTERFACE"
   servers = ["${KON_BOOTSTRAP_SERVER}"]
-  node_class = "etcd"
+  node_class = "${3}"
 
   options = {
     "driver.raw_exec.enable" = "1"

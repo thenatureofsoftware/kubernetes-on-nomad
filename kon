@@ -6,6 +6,6 @@
 if [ ! -d /etc/kon ] || [ ! -f /etc/kon/kon.sh ]; then
     mkdir -p /etc/kon
     mkdir -p /opt/bin
-    docker run --rm -it -v /etc/kon:/etc/kon thenatureofsoftware/kon:0.1-alpha
+    docker run --rm -it -v /etc/kon:/etc/kon thenatureofsoftware/kon:0.2-alpha
 fi
 source /etc/kon/kon.sh

@@ -83,7 +83,7 @@ kon::config () {
 }
 
 ###############################################################################
-# Generates certificates and stores them in consul.                           #
+# Generates certificates and stores them in consul
 ###############################################################################
 kon::generate_certificates () {
     info "Cleaning up any certificates in $K8S_PKIDIR"
@@ -92,6 +92,8 @@ kon::generate_certificates () {
     else
         mkdir -p $K8S_PKIDIR
     fi
+
+    # Get any existing certificates from Consul
     kon::get_cert_and_key "ca"
     kon::get_cert_and_key "apiserver"
     kon::get_cert_and_key "apiserver-kubelet-client"
@@ -99,7 +101,10 @@ kon::generate_certificates () {
     kon::get_cert_and_key "front-proxy-client"
     kon::get_cert_and_key "sa"
 
+    # Call kubeadm to generate any missing certificates
     info "\n$(kubeadm alpha phase certs all --apiserver-advertise-address=$KUBE_APISERVER --apiserver-cert-extra-sans=$KUBE_APISERVER_EXTRA_SANS)"
+    
+    # Put all certificates back in Consul
     kon::put_cert_and_key "ca"
     kon::put_cert_and_key "apiserver"
     kon::put_cert_and_key "apiserver-kubelet-client"
@@ -109,7 +114,7 @@ kon::generate_certificates () {
 }
 
 ###############################################################################
-# Generates kubeconfig files.                                                 #
+# Generates kubeconfig files.
 ###############################################################################
 kon::generate_kubeconfigs () {
     rm $K8S_CONFIGDIR/*.conf /dev/null 2>&1
@@ -140,7 +145,7 @@ kon::generate_kubeconfigs () {
 }
 
 ###############################################################################
-# Generates kubeconfig file for each node (minion).                           #
+# Generates kubeconfig file for each node (minion).
 ###############################################################################
 kon::generate_kubeconfig () {
     info "generating kubeconfig for minion: $1 with ip: $2"
@@ -154,7 +159,7 @@ kon::generate_kubeconfig () {
 }
 
 ###############################################################################
-# Stores key and cert in consul given a key and cert pair name.               #
+# Stores key and cert in consul given a key and cert pair name.
 ###############################################################################
 kon::put_cert_and_key() {
     info "Storing key and cert for $1"
@@ -167,7 +172,7 @@ kon::put_cert_and_key() {
 }
 
 ###############################################################################
-# Fetches any existing cert and key from consul                               #
+# Fetches any existing cert and key from consul.
 ###############################################################################
 kon::get_cert_and_key() {
     consul kv get kubernetes/certs/$1/key > /dev/null 2>&1
@@ -183,7 +188,7 @@ kon::get_cert_and_key() {
 }
 
 ###############################################################################
-# Stopps and removes etcd                                                     #
+# Stopps and removes etcd.
 ###############################################################################
 kon::reset_etcd () {
     info "$(nomad stop etcd)"
@@ -191,7 +196,7 @@ kon::reset_etcd () {
 }
 
 ###############################################################################
-# Stopps and removes kubernetes                                               #
+# Stopps and removes kubernetes.
 ###############################################################################
 kon::reset_kubernetes () {
     info "$(nomad stop kube-control-plane)"
@@ -253,6 +258,9 @@ bootstrap::upload_bundle () {
     mc -q cp $BOOTSTRAP_K8S_CONFIG_BUNDLE $OBJECT_STORE/$BUCKET
 }
 
+###############################################################################
+# Validates etcd configuration and puts it in Consul.
+###############################################################################
 kon::load_etcd_config () {
     
     if [ "$ETCD_SERVERS" == "" ]; then
@@ -270,6 +278,7 @@ kon::load_etcd_config () {
         exit 1
     fi
 
+    # Put etcd configuration in Consul.
     consul::put "etcd/servers" "$ETCD_SERVERS"
     consul::put "etcd/initial-cluster" "$ETCD_INITIAL_CLUSTER"
     consul::put "etcd/initial-cluster-token" "$ETCD_INITIAL_CLUSTER_TOKEN"
@@ -305,15 +314,15 @@ bootstrap::run_kube-control-plane () {
 }
 
 ###############################################################################
-# Commands
-#                                                                     #
+# Commands:
+# generate-config - Generates sample configuration file.
+# generate-certificates - Generates all kubernetes certificates.
+# generate-kubeconfigs - Generates all kubeconfigs.
 ###############################################################################
-enable-dns () {
-    consul::enable_dns
-}
+
 
 ###############################################################################
-# Generates sample configuration file                                         #
+# Generates sample configuration file.
 ###############################################################################
 generate-config () {
     if [ -f "$KON_CONFIG" ]; then
@@ -323,15 +332,28 @@ generate-config () {
     info "You can now configure Kubernetes-On-Nomad by editing $KON_CONFIG"
 }
 
+###############################################################################
+# Generates all kubernetes certificates.
+###############################################################################
 generate-certificates () {
     kon::generate_certificates
 }
 
+###############################################################################
+# Generates all kubeconfigs.
+###############################################################################
 generate-kubeconfigs () {
+    # Verify and put configuration in Consul.
     kon::load_kube_proxy_config
+    # Generate kubeconfigs.
     kon::generate_kubeconfigs
 }
 
+###############################################################################
+# Puts etcd configuration in Consul.
+# The name doesn't reflect what we're doing, but makes sense from a user
+# perspective.
+###############################################################################
 generate-etcd () {
     kon::load_etcd_config
 }
@@ -354,6 +376,20 @@ reset-etcd () {
 
 reset-kubernetes () {
     kon::reset_kubernetes
+}
+
+###############################################################################
+# Enables all DNS lookups through Consul.
+###############################################################################
+consul-dns-disable () {
+    consul::enable-consul-dns
+}
+
+###############################################################################
+# Disables all DNS lookups through Consul and restores the original config.
+###############################################################################
+consul-dns-disable () {
+   consul::disable-consul-dns
 }
 
 start-all () {
@@ -432,15 +468,16 @@ install-kube () {
     kubelet::install
 }
 
-install-consul () {
-    consul::install
-}
 
 install-nomad () {
     nomad::install
 }
 
-start-bootstrap-consul() {
+consul-install () {
+    consul::install
+}
+
+consul-start-bootstrap () {
     if [ -z $(which consul) ]; then
         error "Please install Consul binaries first (kon install consul)"
         exit 1
@@ -462,7 +499,7 @@ start-bootstrap-consul() {
     info "$(consul::put kon/nameserver $kon_nameserver)"
 }
 
-start-consul () {
+consul-start () {
     if [ -z "$(which consul)" ]; then
         error "Please install Consul binaries first (kon install consul)"
         exit 1
@@ -513,7 +550,7 @@ source $SCRIPTDIR/common.sh
 source $SCRIPTDIR/kon_common.sh
 source $SCRIPTDIR/consul.sh
 source $SCRIPTDIR/nomad.sh
-source $SCRIPTDIR/kubelet_install.sh
+source $SCRIPTDIR/kubernetes.sh
 
 # Move to stage 1 init funcion
 kon::check_root
@@ -530,9 +567,12 @@ if [ "$1" == "install_script" ]; then
     fi
 fi
 
-
+consul_version="Consul not installed"
+nomad_version="Nomad not installed"
+if [ ! -z "$(common::check_cmd consul)" ]; then consul_version="$(consul version|grep Consul)"; fi
+if [ ! -z "$(common::check_cmd nomad)" ]; then nomad_version="$(nomad version)"; fi
 cat $SCRIPTDIR/banner.txt
-printf "$(nomad version), $(consul version|grep Consul), Kubernetes $K8S_VERSION, kubeadm $KUBEADM_VERSION\n\n"
+printf "$nomad_version, $consul_version, Kubernetes $K8S_VERSION, kubeadm $KUBEADM_VERSION\n\n"
 
 ###############################################################################
 # Parse arguments                                                             #

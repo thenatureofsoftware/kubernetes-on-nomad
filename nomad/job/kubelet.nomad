@@ -1,41 +1,15 @@
-# There can only be a single job definition per file. This job is named
-# "example" so it will create a job with the ID and Name "example".
-
-# The "job" stanza is the top-most configuration option in the job
-# specification. A job is a declarative specification of tasks that Nomad
-# should run. Jobs have a globally unique name, one or many task groups, which
-# are themselves collections of one or many tasks.
-#
-# For more information and examples on the "job" stanza, please see
-# the online documentation at:
-#
-#     https://www.nomadproject.io/docs/job-specification/job.html
-#
 job "kubelet" {
   region = "global"
   datacenters = ["dc1"]
   type = "system"
 
-  update {
-    max_parallel = 1
-    min_healthy_time = "10s"
-    healthy_deadline = "3m"
-    auto_revert = false
-    canary = 0
-  }
-
-
-  group "tasks" {
+  group "kubelet-grp" {
     count = 1
 
-    restart {
-      # The number of attempts to run the job within the specified interval.
-      attempts = 10
-      interval = "5m"
-
-      delay = "25s"
-
-      mode = "delay"
+    constraint {
+      attribute = "${node.class}"
+      operator  = "set_contains"
+      value   = "kubelet"
     }
 
     ephemeral_disk {
@@ -77,7 +51,7 @@ EOF
                   "--cluster-domain=cluster.local",
                   "--authorization-mode=Webhook",
                   "--client-ca-file=local/kubernetes/pki/ca.crt",
-                  "--cadvisor-port=0"]
+                  "--cadvisor-port=4194"]
       }
 
       resources {
@@ -91,6 +65,22 @@ EOF
           port "heapster" {
             static = "10255"
           }
+          port "cadvisor" {
+            static = "4194"
+          }
+        }
+      }
+
+      service {
+        name = "kubelet-${attr.unique.hostname}"
+        tags = ["global", "kubelet"]
+        port = "kubelet"
+        check {
+          type = "http"
+          port = "cadvisor"
+          path = "/healthz"
+          interval = "5s"
+          timeout = "15s"
         }
       }
     }

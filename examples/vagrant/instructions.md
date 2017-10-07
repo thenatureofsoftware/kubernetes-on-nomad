@@ -17,12 +17,14 @@ core-01 ~ #
 
 This step will show you how to install kon and generate a sample configuration.
 ```
-core-01 ~ # mkdir -p /opt/bin && curl -o /opt/bin/kon https://raw.githubusercontent.com/TheNatureOfSoftware/kubernetes-on-nomad/master/kon && chmod a+x /opt/bin/kon
+core@core-01 ~ $ sudo mkdir -p /opt/bin \
+&& sudo curl -s -o /opt/bin/kon https://raw.githubusercontent.com/TheNatureOfSoftware/kubernetes-on-nomad/master/kon \
+&& sudo chmod a+x /opt/bin/kon
 ```
 
 The first time you invoke `kon` it will pull down a docker image and install all `kon`-scripts to `/etc/kon`.
 ```
-core-01 ~ # kon generate config
+core@core-01 ~ $ sudo kon generate config
 Unable to find image 'thenatureofsoftware/kon:0.1-alpha' locally
 0.1-alpha: Pulling from thenatureofsoftware/kon
 cc5efb633992: Pull complete 
@@ -59,7 +61,8 @@ But for this example we have a config already prepared.
 
 The next step is to copy the prepared config:
 ```
-core-01 ~ # mkdir /etc/kon && cp /example/kon.conf /etc/kon/
+core@core-01 ~ $ sudo mkdir /etc/kon \
+&& sudo cp /example/kon.conf /etc/kon/
 ```
 
 ## Step 3 - Start bootstrap Consul
@@ -70,12 +73,12 @@ Consul is run as a docker container.
 First we need to install consul binaries. Even if we run Consul container so do we
 need the `consul` binary for communicating with Consul.
 ```
-core-01 ~ # kon install consul 
+core@core-01 ~ $ sudo kon consul install 
 ````
 
 Then start the Consul bootstrap server:
 ```
-core-01 ~ # kon --interface eth1 start bootstrap consul
+core@core-01 ~ $ sudo kon --interface eth1 consul start bootstrap
 [2017/10/05:12:20:09 Info] Switching nameserver to consul
 [2017/10/05:12:20:09 Info] Creating symlink /etc/resolv.conf -> /etc/kon/resolv.conf
 [2017/10/05:12:20:20 Info] Waiting for consul to start...
@@ -102,7 +105,7 @@ kon-consul Status:Up 13 minutes Created:2017-10-05 12:20:09 +0000 UTC
 
 Next step is to install and run Nomad:
 ```
-core-01 ~ # kon install nomad
+core@core-01 ~ $ sudo kon install nomad
 
               .-'''-.                
              '   _    \              
@@ -148,7 +151,21 @@ core-01.global  172.17.8.101  4648  alive   true    2         0.6.3  dc1        
 
 ## Step 5 - Start Nomad and Consul on all other nodes
 
-Now it's time to switch to the rest of the nodes and join them all together to one Nomad cluster:
+Now it's time to switch to the rest of the nodes and join them all together to one Nomad cluster.
+The difference here is how we start Consul by pointing at the bootstrap server:
+```
+core@core-02 ~ $ sudo kon --bootstrap 172.17.8.101 --interface eth1 consul start
+```
+
+Run the following commands on all other nodes:
+```
+core@core-02 ~ $ sudo mkdir -p /opt/bin \
+&& sudo curl -s -o /opt/bin/kon https://raw.githubusercontent.com/TheNatureOfSoftware/kubernetes-on-nomad/master/kon \
+&& sudo chmod a+x /opt/bin/kon \
+&& sudo kon consul install \
+&& sudo kon --bootstrap 172.17.8.101 --interface eth1 consul start \
+&& sudo kon install nomad
+```
 
 ### 1 Install `kon`:
 ```
@@ -185,6 +202,9 @@ core-02 ~ # kon install nomad
 Repeat these steps for the rest of the nodes.
 
 ## Step 6
+
+Up to now we've only been starting our infrastructure for running Kubernetes. Now it's time
+to start bringing Kubernetes up and running.
 
 
 

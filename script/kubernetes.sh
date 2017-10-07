@@ -3,6 +3,27 @@
 kubelet::install () {
     log "Installing kubelet, kubectl and kubeadm ..."
     
+    case "$(common::os)" in
+        "Container Linux by CoreOS")
+            kubelet::install_by_download
+            ;;
+        "Ubuntu")
+            kubelet::install_by_apt
+            ;;
+        *)
+    esac
+
+    kubelet::download_and_install "kubectl" "$K8S_VERSION"
+    kubelet::download_and_install "kubeadm" "$KUBEADM_VERSION"
+
+    info "Done installing Kubernetes components"
+}
+
+kubelet::install_by_download () {
+    kubelet::download_and_install "kubelet" "$K8S_VERSION"
+}
+
+kubelet::install_by_apt () {
     apt-get update > /dev/null 2>&1
     apt-get install -y apt-transport-https > /dev/null 2>&1
     curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - > /dev/null 2>&1
@@ -11,16 +32,14 @@ kubelet::install () {
 EOF
     apt-get update > /dev/null 2>&1
     apt-get install -y kubelet=$(echo $K8S_VERSION | sed 's/v//g')-00 > /dev/null 2>&1
-    
-    #kubelet::download_and_install "kubelet" "$K8S_VERSION"
-    kubelet::download_and_install "kubectl" "$K8S_VERSION"
-    kubelet::download_and_install "kubeadm" "$KUBEADM_VERSION"
     kubelet::reset
-
-    log "Done installing Kubernetes components"
 }
 
 kubelet::download_and_install() {
+    if [ "$1" == "" ] || [ "$2" == "" ]; then
+        fail "Both component and version is required, got component:$2 and version:$1"
+    fi
+    
     info "Downloading and installing: $1 version: $2"
     wget --quiet https://storage.googleapis.com/kubernetes-release/release/$2/bin/linux/amd64/$1
     chmod a+x $1

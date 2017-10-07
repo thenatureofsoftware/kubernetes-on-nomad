@@ -3,7 +3,6 @@
 help_msg () {
   cat <<EOF
 Install Commands:
-  install consul
   install nomad
   install kube             Installs kubernetes components: kubelet, kubeadm and kubectl
 
@@ -26,8 +25,16 @@ Reset Commands:
   reset etcd               Stopps etcd and deletes all configuration.
   reset kubernetes         Stopps kubernetes control plane and deletes all certificates and configuration.
 
+Consul Commands:
+  consul install           Installs Consul
+  consul start             Starts Consul, --bootstrap and --interface arguments are required
+  consul start bootstrap   Starts a bootstrap Consul, --interface argument are required 
+  consul dns enable        Enables all DNS lookups through Consul
+  consul dns disable       Disables all DNS lookups through Consul and restores the original config
+
 Other Commands:
-  enable dns               Enables service lookup in consul using the hosts resolv.conf.
+  consul dns enable        Enables all DNS lookups through Consul
+  consul dns disable       Disables all DNS lookups through Consul and restores the original config
   addon dns                Installs dns addon.
   setup kubectl            Configures kubectl for accessing the cluster.
   start bootstrap consul
@@ -56,8 +63,7 @@ then
   echo "Command arg value: '${_arg_command[*]}'"
   echo "Optional arg '--config|-c' value: '$_arg_config'"
   echo "Optional arg '--bootstrap|-b' value: '$_arg_bootstrap'"
-else
-  echo "Not telling anything, print not requested"
+  echo "Optional arg '--interface|-i' value: '$_arg_interface'"
 fi
 
 # ] <-- needed because of Argbash
