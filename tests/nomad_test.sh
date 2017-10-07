@@ -31,4 +31,4 @@ test::nomad::client_config () {
     assert "nomad::client_config_only_kubelet" "$_test_" "kubelet"
 }
 
-test::nomad::client_config
+(test::nomad::client_config)
