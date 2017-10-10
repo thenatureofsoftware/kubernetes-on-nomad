@@ -12,12 +12,6 @@ job "kubelet" {
       value   = "kubelet"
     }
 
-    ephemeral_disk {
-      migrate = true
-      size    = "500"
-      sticky  = true
-    }
-
     task "kubelet" {
       driver = "raw_exec"
 
@@ -27,7 +21,6 @@ job "kubelet" {
 {{printf "kubernetes/minions/%s/kubeconfig" (env "attr.unique.hostname") | key }}
 EOF
       }
-
 
       template {
         destination = "local/kubernetes/pki/ca.crt"

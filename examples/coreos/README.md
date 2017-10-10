@@ -1,14 +1,33 @@
 # Setting up Kubernetes On Nomad using CoreOS (Vagrant)
 
-This example will show you how to setup Kubernetes On Nomad on 6 CoreOS Vagrant servers.
+This example will show you how to setup Kubernetes On Nomad on four CoreOS Vagrant servers.
+You need Vagrant installed and it's only been tested on VirtulaBox.
 
-TL;DR to bring the cluster up run:
+## TL;DR
+
+I do recommend to follow the steps below, but if you're impatient you can bring up the cluster by running the following:
+```
+$ git clone https://github.com/TheNatureOfSoftware/kubernetes-on-nomad.git
+$ cd kubernetes-on-arm/examples/coreos
+$ ./setup.sh
 ```
 
+Once the cluster is up and running you need to add Kubernetes networking:
 ```
-
+$ vagrant ssh core-01
+core@core-01 ~ $ sudo -u root -i
+core-01 ~ # kon setup kubectl
+core-01 ~ #
+core-01 ~ # # Installs Weave Net
+core-01 ~ # kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d n)"
+core-01 ~ # # Adds DNS
+core-01 ~ # kon addon dns
+````
 
 ## Step 1 - Boot up all machines and login to the first
+
+This step will create our four CoreOS servers that we will be using to install KON.
+
 Boot up all machines using Vagrant:
 ```
 $ git clone https://github.com/TheNatureOfSoftware/kubernetes-on-nomad.git
@@ -21,7 +40,7 @@ core-01 ~ #
 
 ## Step 2 - Install kon and generate a configuration
 
-This step will show you how to install kon and generate a sample configuration.
+This step will show you how to install `kon`-tool and use it to generate a sample configuration.
 ```
 core@core-01 ~ $ sudo mkdir -p /opt/bin \
 && sudo curl -s -o /opt/bin/kon https://raw.githubusercontent.com/TheNatureOfSoftware/kubernetes-on-nomad/master/kon \
@@ -32,7 +51,7 @@ The first time you invoke `kon` it will pull down a docker image and install all
 ```
 core@core-01 ~ $ sudo kon generate config
 Unable to find image 'thenatureofsoftware/kon:0.1-alpha' locally
-0.1-alpha: Pulling from thenatureofsoftware/kon
+0.2-alpha: Pulling from thenatureofsoftware/kon
 cc5efb633992: Pull complete 
 78edf86befdd: Pull complete 
 dc6909d66ba6: Pull complete 
@@ -40,7 +59,7 @@ dc6909d66ba6: Pull complete
 50d1bd5ec205: Pull complete 
 d5190cd89ec5: Pull complete 
 Digest: sha256:8b0bbddbc6eaf06bb57b369fe88da3fa5902bb3357ce2b31616d816ab841cff4
-Status: Downloaded newer image for thenatureofsoftware/kon:0.1-alpha
+Status: Downloaded newer image for thenatureofsoftware/kon:0.2-alpha
 Installing kubernetes-on-nomad to directory: /etc/kon
 Script installed successfully!
 
@@ -57,7 +76,7 @@ Script installed successfully!
  |   |  \  \             |  |   |  | 
  '    \  \  \            |  |   |  | 
 '------'  '---'          '--'   '--' 
-v0.1-alpha
+v0.2-alpha
 
 [2017/10/05:09:43:58 Info] You can now configure Kubernetes-On-Nomad by editing /etc/kon/kon.conf
 ```

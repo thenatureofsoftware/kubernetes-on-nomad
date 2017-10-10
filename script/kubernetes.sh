@@ -25,8 +25,12 @@ kubernetes::install () {
 
 kubernetes::install_by_download () {
     kubernetes::download_and_install "kubelet" "$K8S_VERSION"
+    common::fail_on_error "Failed to install kubelet"
     mkdir -p /etc/kubernetes/manifests
 
+    kubernetes::download_and_install "kube-apiserver" "$K8S_VERSION"
+    common::fail_on_error "Failed to install kube-apiserver"
+    
     info "Installing cni plugins..."
     if [ "$CNI_VERSION" == "" ]; then fail "CNI_VERSION is not set, is KON_CONFIG loaded?"; fi
 
@@ -43,8 +47,9 @@ kubernetes::install_by_apt () {
     cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
     deb http://apt.kubernetes.io/ kubernetes-xenial main
 EOF
+    local k8s_version=$(echo $K8S_VERSION | sed 's/v//g')-00
     apt-get update > "$(common::dev_null)" 2>&1
-    apt-get install -y kubelet=$(echo $K8S_VERSION | sed 's/v//g')-00 > "$(common::dev_null)" 2>&1
+    apt-get install -y kubelet=$k8s_version kube-apiserver=$k8s_version > "$(common::dev_null)" 2>&1
     kubelet::reset
 }
 
