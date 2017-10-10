@@ -1,6 +1,11 @@
 #!/bin/bash
 
-echo "This example shows Kubernetes-On-Nomad running on 6 coreos nodes."
+echo "This example shows Kubernetes-On-Nomad running on 4 coreos nodes."
+echo "Node core-01 runs Nomad and Consul in server mode."
+echo "Node core-02-4 are Kubernetes nodes."
+echo "When this script is done, login to one of the nodes and setup Kubernetes networking:"
+echo "$ kon setup kubectl"
+echo 'kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"'
 
 bootstrap_cmd="\
 sudo mkdir -p /opt/bin \
@@ -41,7 +46,7 @@ sudo kon generate all \
 echo "Starting provisioning bootstrap node core-01"
 (vagrant ssh -c "$(printf "%s" "$bootstrap_cmd")" core-01 > /dev/null 2>&1)
 
-for i in `seq 2 6`; do
+for i in `seq 2 4`; do
     (
         echo "Starting provisioning for node core-0$i"
         vagrant ssh --no-tty -c "$(printf "%s" "$node_cmd")" core-0$i > /dev/null 2>&1

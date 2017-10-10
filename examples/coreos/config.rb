@@ -1,5 +1,5 @@
 # Size of the CoreOS cluster created by Vagrant
-$num_instances=6
+$num_instances=4
 
 # Used to fetch a new discovery token for a cluster of size $num_instances
 $new_discovery_url="https://discovery.etcd.io/new?size=#{$num_instances}"
@@ -65,7 +65,7 @@ end
 
 # Customize VMs
 #$vm_gui = false
-$vm_memory = 1024
+$vm_memory = 2048
 $vm_cpus = 2
 #$vb_cpuexecutioncap = 100
 
