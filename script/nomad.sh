@@ -126,6 +126,20 @@ nomad::client_config () {
     _test_=$node_class
 }
 
+###############################################################################
+# Runs a Nomad job
+# Param $1 - job name ( ${JOBDIR}/$1.nomad )
+###############################################################################
+nomad::run_job () {
+    if [ "$1" == "" ]; then fail "Job name can't be empty, did you forgett the argument?"; fi
+    local job_name="$1"
+
+    nomad run $JOBDIR/${job_name}.nomad > $(common::dev_null) 2>&1
+    common::fail_on_error "Failed to run $job_name."
+    sleep 3
+    info "$job_name job $(nomad job status $job_name | grep "^Status")"
+}
+
 nomad::service_template () {
   cat <<EOF > $1
 [Unit]

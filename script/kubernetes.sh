@@ -31,6 +31,12 @@ kubernetes::install_by_download () {
     kubernetes::download_and_install "kube-apiserver" "$K8S_VERSION"
     common::fail_on_error "Failed to install kube-apiserver"
     
+    kubernetes::download_and_install "kube-scheduler" "$K8S_VERSION"
+    common::fail_on_error "Failed to install kube-scheduler"
+
+    kubernetes::download_and_install "kube-controller-manager" "$K8S_VERSION"
+    common::fail_on_error "Failed to install kube-controller-manager"
+
     info "Installing cni plugins..."
     if [ "$CNI_VERSION" == "" ]; then fail "CNI_VERSION is not set, is KON_CONFIG loaded?"; fi
 

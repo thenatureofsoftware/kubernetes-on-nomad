@@ -405,11 +405,15 @@ start-kube-proxy () {
     info "kube-proxy job status after 5 sec:\n$(nomad job status kube-proxy)"
 }
 
+###############################################################################
+# Starts the Kubernetes control plane 
+###############################################################################
 start-control-plane () {
-    info "Starting kubernetes control plane ..."
-    info "$(nomad run $JOBDIR/kube-control-plane.nomad)"
-    sleep 5
-    info "Kubernetes control plane job status after 5 sec:\n$(nomad job status kube-control-plane)"
+    info "Starting Kubernetes control plane ..."
+    for comp in kube-apiserver kube-scheduler kube-controller-manager; do
+        nomad::run_job $comp
+    done
+    info "Kubernetes control plane started."
 }
 
 addon-kube-proxy () {
