@@ -1,9 +1,11 @@
-.vagrant
+
 tmp
 kon.conf
 setup.env
-*.log
-kubernetes_config.tar.gz
-examples/*.img
-examples/*.vmdk
-examples/config.ign.merged
+
+**/*.img
+**/*.vmdk
+**/config.ign.merged
+**/.vagrant
+**/*.log
+**/*.out

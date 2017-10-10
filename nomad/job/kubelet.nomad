@@ -37,7 +37,7 @@ EOF
       }
 
       config {
-        command = "/usr/bin/kubelet"
+        command = "/opt/bin/kubelet"
         args    = ["--node-ip=${attr.unique.network.ip-address}",
                   "--fail-swap-on=false",
                   "--kubeconfig=local/kubernetes/kubelet.conf",

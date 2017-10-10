@@ -9,32 +9,52 @@ nomad::install () {
     unzip -d $tmpdir nomad_${NOMAD_VERSION}_linux_amd64.zip
     mv $tmpdir/nomad ${BINDIR}/
     rm -f nomad_${NOMAD_VERSION}_linux_amd64.zip*
-    nomad version > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
-        info "$(nomad version) installed"
+    nomad version > "$(common::dev_null)" 2>&1
+
+    if [ $? -gt 0 ]; then fail "Nomad install failed!"; fi
+}
+
+nomad::start () {
+    if [ ! "$(common::which nomad)" ]; then fail "Nomad not installed, please install nomad first."; fi
+    
+    if [ ! -f "$(nomad::resolve_nomad_service_unit_file)" ]; then
         nomad::deploy_service_unit
     else
-        error "Nomad install failed!"
+        systemctl restart nomad > "$(common::dev_null)" 2>&1
+    fi
+}
+
+nomad::stop () {
+    if [ -f "$(nomad::resolve_nomad_service_unit_file)" ]; then
+        systemctl stop nomad > "$(common::dev_null)" 2>&1
     fi
 }
 
 nomad::deploy_service_unit () {
     mkdir -p /etc/nomad
     log "OS: $(common::os)"
+
     nomad_service_unit_file=$(nomad::resolve_nomad_service_unit_file)
-    nomad::service_template $nomad_service_unit_file
     nomad_advertise_ip=$(common::ip_addr)
-    if [ "$(common::is_server)" == "true" ]; then
+
+    if [ "$KON_DEV" == "true" ]; then
+        info "Generating Nomad dev config"
+        nomad::service_template $nomad_service_unit_file "-dev"
+        nomad::dev_template "/etc/nomad/dev.hcl" "$nomad_advertise_ip"
+    elif [ "$(common::is_server)" == "true" ]; then
         info "Generating Nomad server config"
+        nomad::service_template $nomad_service_unit_file
         nomad::server_template "/etc/nomad/server.hcl" "$nomad_advertise_ip"
     else
         info "Generating Nomad client config"
+        nomad::service_template $nomad_service_unit_file
         nomad::client_config "/etc/nomad/client.hcl" "$nomad_advertise_ip"
     fi
-    systemctl daemon-reload > /dev/null 2>&1
-    systemctl disable nomad.service > /dev/null 2>&1
-    systemctl enable nomad.service > /dev/null 2>&1
-    systemctl restart nomad.service > /dev/null 2>&1
+
+    systemctl daemon-reload > "$(common::dev_null)" 2>&1
+    systemctl disable nomad.service > "$(common::dev_null)" 2>&1
+    systemctl enable nomad.service > "$(common::dev_null)" 2>&1
+    systemctl restart nomad.service > "$(common::dev_null)" 2>&1
 }
 
 nomad::resolve_nomad_service_unit_file () {
@@ -49,20 +69,26 @@ nomad::resolve_nomad_service_unit_file () {
     esac
 }
 
-nomad::enable_service () {
-    sudo mkdir -p /etc/nomad
-
-    if [ "$SERVER" = "true" ]; then
-        sed -e "s/\${ADVERTISE_IP}/${ADVERTISE_IP}/g" "$BASEDIR/nomad/server.hcl.tmpl" > /etc/nomad/server.hcl
-    else
-        sed -e "s/\${ADVERTISE_IP}/${ADVERTISE_IP}/g" -e "s/\${SERVER_IP}/${SERVER_IP}/g" "$BASEDIR/nomad/client.hcl.tmpl" > /etc/nomad/client.hcl
+###############################################################################
+# Generates the nomad client servers config.
+###############################################################################
+nomad::servers_config () {
+    arg_servers="$1"
+    if [ "$arg_servers" == "" ]; then
+        arg_servers="$KON_SERVERS"
+        if [ "$arg_servers" == "" ]; then
+            fail "KON_SERVERS is not set, is KON_CONFIG loaded?"
+        fi
     fi
 
-    cp $BASEDIR/nomad/nomad.service /lib/systemd/system
-    systemctl daemon-reload > /dev/null 2>&1
-    systemctl disable nomad.service > /dev/null 2>&1
-    systemctl enable nomad.service > /dev/null 2>&1
-    systemctl restart nomad.service > /dev/null 2>&1
+    strings=()
+    nomad_servers=()
+    IFS=', ' read -r -a strings <<< $arg_servers
+    for elem in "${strings[@]}"; do
+        nomad_servers+=("\"$elem\"")
+    done
+    _test_="[$(common::join_by , "${nomad_servers[@]}")]"
+    echo $_test_
 }
 
 ###############################################################################
@@ -74,8 +100,8 @@ nomad::enable_service () {
 nomad::client_config () {
     # node_class variable
     node_class=()
-    if [ ! -n "$ETCD_INITIAL_CLUSTER" ]; then fail "ETCD_INITIAL_CLUSTER is not set is KON_CONFIG loaded?"; fi
-    if [ ! -n "$KUBE_MINIONS" ]; then fail "KUBE_MINIONS is not set is KON_CONFIG loaded?"; fi
+    if [ ! -n "$ETCD_INITIAL_CLUSTER" ]; then fail "ETCD_INITIAL_CLUSTER is not set, is KON_CONFIG loaded?"; fi
+    if [ ! -n "$KUBE_MINIONS" ]; then fail "KUBE_MINIONS is not set, is KON_CONFIG loaded?"; fi
 
     # Resolve ip-address
     if [ ! -n "$nomad_advertise_ip" ]; then
@@ -95,7 +121,7 @@ nomad::client_config () {
     fi
 
     node_class=$(common::join_by , "${node_class[@]}")
-    nomad::client_template $1 "$nomad_advertise_ip" "$node_class"
+    nomad::client_template $1 "$nomad_advertise_ip" "$node_class" "$(nomad::servers_config)"
 
     _test_=$node_class
 }
@@ -108,7 +134,7 @@ Documentation=https://nomadproject.io/docs/
 
 [Service]
 EnvironmentFile=-/etc/nomad/nomad.env
-ExecStart=$BINDIR/nomad agent -config /etc/nomad
+ExecStart=$BINDIR/nomad agent -config /etc/nomad $2
 ExecReload=/bin/kill -HUP $MAINPID
 LimitNOFILE=65536
 
@@ -120,7 +146,7 @@ EOF
 nomad::client_template() {
   cat <<EOF > "$1"
 bind_addr = "0.0.0.0"
-data_dir = "/var/lib/nomad/"
+data_dir = "/var/lib/nomad"
 advertise {
  http = "${2}"
  rpc  = "${2}"
@@ -129,8 +155,9 @@ advertise {
 client {
   enabled = true
   network_interface = "$KON_BIND_INTERFACE"
-  servers = ["${KON_BOOTSTRAP_SERVER}"]
+  servers = ${4}
   node_class = "${3}"
+  no_host_uuid = false
 
   options = {
     "driver.raw_exec.enable" = "1"
@@ -161,5 +188,32 @@ server {
 consul {
   address = "127.0.0.1:8500"
 } 
+EOF
+}
+
+nomad::dev_template() {
+  cat <<EOF > "$1"
+bind_addr = "0.0.0.0"
+data_dir = "/var/lib/nomad"
+advertise {
+ http = "${2}"
+ rpc  = "${2}"
+ serf = "${2}"
+}
+client {
+  node_class = "etcd,kubelet"
+  no_host_uuid = false
+  network_interface = "$KON_BIND_INTERFACE"
+  enabled = true
+  options = {
+    "driver.raw_exec.enable" = "1"
+    "driver.whitelist" = "docker,raw_exec,exec,java"
+    "user.checked_drivers" = "exec"
+    "docker.privileged.enabled" = "true"
+  }
+}
+server { 
+ enabled = true  
+}
 EOF
 }

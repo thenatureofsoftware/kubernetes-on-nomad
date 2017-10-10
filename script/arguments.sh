@@ -2,14 +2,9 @@
 
 help_msg () {
   cat <<EOF
-Install Commands:
-  install consul
-  install nomad
-  install kube             Installs kubernetes components: kubelet, kubeadm and kubectl
-
 Generate Commands:
   generate init            Generates a sample /etc/kon.conf file
-  generate all             Generates certificates and kubeconfigs.
+  generate all             Generates etcd configuration, certificates and kubeconfigs.
   generate etcd            Reads the etcd configuration and stores it in consul.
   generate certificates    Generates all certificates and stores them in consul. The command only generates missing certificates and is safe to be run multiple times.
   generate kubeconfigs     Generates all kubeconfig-files and stores them in consul.
@@ -26,12 +21,26 @@ Reset Commands:
   reset etcd               Stopps etcd and deletes all configuration.
   reset kubernetes         Stopps kubernetes control plane and deletes all certificates and configuration.
 
+Consul Commands:
+  consul install           Installs Consul
+  consul start             Starts Consul, --bootstrap and --interface arguments are required
+  consul start bootstrap   Starts a bootstrap Consul, --interface argument are required
+  consul dns enable        Enables all DNS lookups through Consul
+  consul dns disable       Disables all DNS lookups through Consul and restores the original config
+
+Kubernetes Commands:
+  kubernetes install       Installs kubernetes components: kubelet, kubeadm and kubectl
+  kubernetes reset         Stopps kubernetes control plane and deletes all certificates and configuration.
+
+Nomad Commands:
+  nomad install            Installs Nomad
+  nomad start              Starts Nomad
+  nomad restart            Restarts Nomad
+  nomad stop               Stops Nomad
+
 Other Commands:
-  enable dns               Enables service lookup in consul using the hosts resolv.conf.
   addon dns                Installs dns addon.
   setup kubectl            Configures kubectl for accessing the cluster.
-  start bootstrap consul
-  start consul
 
 EOF
 }
@@ -40,6 +49,7 @@ EOF
 # ARG_OPTIONAL_SINGLE([config],[c],[Configuration file to use],[])
 # ARG_OPTIONAL_SINGLE([interface],[i],[Network interface to use for Consul bind address],[])
 # ARG_OPTIONAL_SINGLE([bootstrap],[b],[Bootstrap Consul Server],[])
+# ARG_OPTIONAL_BOOLEAN([debug],[d],[Run kon in debug mode (bash -x)],[])
 # ARG_OPTIONAL_BOOLEAN([print],[],[A boolean option with long flag (and implicit default: off)])
 # ARG_POSITIONAL_MULTI([command],[Positional arg description],[3],[""])
 # ARG_HELP([KON helps you setup and run Kubernetes On Nomad (KON).\n],[$(help_msg)])
@@ -63,7 +73,7 @@ die()
 begins_with_short_option()
 {
   local first_option all_short_options
-  all_short_options='cibhv'
+  all_short_options='cibdhv'
   first_option="${1:0:1}"
   test "$all_short_options" = "${all_short_options/$first_option/}" && return 1 || return 0
 }
@@ -77,17 +87,19 @@ _arg_command=('' '' "")
 _arg_config=
 _arg_interface=
 _arg_bootstrap=
+_arg_debug=off
 _arg_print=off
 
 print_help ()
 {
   printf "%s\n" "KON helps you setup and run Kubernetes On Nomad (KON).
 		"
-  printf 'Usage: %s [-c|--config <arg>] [-i|--interface <arg>] [-b|--bootstrap <arg>] [--(no-)print] [-h|--help] [-v|--version] <command-1> <command-2> [<command-3>]\n' "$0"
+  printf 'Usage: %s [-c|--config <arg>] [-i|--interface <arg>] [-b|--bootstrap <arg>] [-d|--(no-)debug] [--(no-)print] [-h|--help] [-v|--version] <command-1> <command-2> [<command-3>]\n' "$0"
   printf "\t%s\n" "<command>: Positional arg description (defaults for <command-3>: '""')"
   printf "\t%s\n" "-c,--config: Configuration file to use (no default)"
   printf "\t%s\n" "-i,--interface: Network interface to use for Consul bind address (no default)"
   printf "\t%s\n" "-b,--bootstrap: Bootstrap Consul Server (no default)"
+  printf "\t%s\n" "-d,--debug,--no-debug: Run kon in debug mode (bash -x) (off by default)"
   printf "\t%s\n" "--print,--no-print: A boolean option with long flag (and implicit default: off) (off by default)"
   printf "\t%s\n" "-h,--help: Prints help"
   printf "\t%s\n" "-v,--version: Prints version"
@@ -132,6 +144,18 @@ parse_commandline ()
         ;;
       -b*)
         _arg_bootstrap="${_key##-b}"
+        ;;
+      -d|--no-debug|--debug)
+        _arg_debug="on"
+        test "${1:0:5}" = "--no-" && _arg_debug="off"
+        ;;
+      -d*)
+        _arg_debug="on"
+        _next="${_key##-d}"
+        if test -n "$_next" -a "$_next" != "$_key"
+        then
+          begins_with_short_option "$_next" && shift && set -- "-d" "-${_next}" "$@" || die "The short option '$_key' can't be decomposed to ${_key:0:2} and -${_key:2}, because ${_key:0:2} doesn't accept value and '-${_key:2:1}' doesn't correspond to a short option."
+        fi
         ;;
       --no-print|--print)
         _arg_print="on"
@@ -190,6 +214,7 @@ then
   echo "Command arg value: '${_arg_command[*]}'"
   echo "Optional arg '--config|-c' value: '$_arg_config'"
   echo "Optional arg '--bootstrap|-b' value: '$_arg_bootstrap'"
+  echo "Optional arg '--debug|-d' value: '$_arg_debug'"
   echo "Optional arg '--interface|-i' value: '$_arg_interface'"
 fi
 

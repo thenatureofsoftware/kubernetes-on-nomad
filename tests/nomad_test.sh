@@ -1,15 +1,7 @@
 #!/bin/bash
 
 TESTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-SCRIPTDIR=$TESTDIR/../script
-KON_LOG_FILE=$TESTDIR/test.log
-NO_LOG=true
-
-assert () {
-    if [ ! "$2" == "$3" ]; then
-        printf "%s\n\t%s\n\t%s\n" "Test failed in: $1" "actual: [$2]" "expected: [$3]"
-    fi
-}
+source $TESTDIR/../script/test.sh
 
 test::nomad::client_config () {
     source $SCRIPTDIR/common.sh
@@ -31,4 +23,23 @@ test::nomad::client_config () {
     assert "nomad::client_config_only_kubelet" "$_test_" "kubelet"
 }
 
+test::nomad::servers_config () {
+    source $SCRIPTDIR/common.sh
+    source $SCRIPTDIR/nomad.sh
+
+    servers="192.168.0.101, 192.168.0.102"
+
+    # No argument, should fail
+    (nomad::servers_config)
+    assert "nomad::servers_config" "$?" "1"
+
+    # Servers as $1
+    assert "nomad::servers_config" "$(nomad::servers_config "$servers")" '["192.168.0.101","192.168.0.102"]'
+    
+    # KON_SERVERS set 
+    KON_SERVERS=$servers
+    assert "nomad::servers_config" "$(nomad::servers_config)" '["192.168.0.101","192.168.0.102"]'
+}
+
 (test::nomad::client_config)
+(test::nomad::servers_config)

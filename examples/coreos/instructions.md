@@ -1,6 +1,12 @@
 # Setting up Kubernetes On Nomad using CoreOS (Vagrant)
 
-This example will show you how to setup Kubernetes On Nomad on X CoreOS Vagrant servers.
+This example will show you how to setup Kubernetes On Nomad on 6 CoreOS Vagrant servers.
+
+TL;DR to bring the cluster up run:
+```
+
+```
+
 
 ## Step 1 - Boot up all machines and login to the first
 Boot up all machines using Vagrant:
@@ -167,44 +173,37 @@ core@core-02 ~ $ sudo mkdir -p /opt/bin \
 && sudo kon install nomad
 ```
 
-### 1 Install `kon`:
+## Step 6 - Start etcd
+
+Up until now we've only been starting our infrastructure for running Kubernetes. Now it's time
+to start bringing Kubernetes up.
+
+We first need to generate all Kubernetes konfiguration:
 ```
-$ vagrant ssh core-02
-core@core-02 ~ $ sudo -u root -i
-core-02 ~ # mkdir -p /opt/bin && curl -o /opt/bin/kon https://raw.githubusercontent.com/TheNatureOfSoftware/kubernetes-on-nomad/master/kon && chmod a+x /opt/bin/kon
 ```
 
-### 2 Install and start Consul
-First install Consul binaries:
+If you take a look at the configuration (you can use any node):
 ```
-core-02 ~ # kon install consul
-````
-
-Now start Consul. This step is a little bit different from starting the Consul bootstrap instance. This time you need to point to the `bootstrap` server:
-```
-core-02 ~ # kon --bootstrap 172.17.8.101 --interface eth1 start consul
-```
-You can now verify that the two nodes have joined together:
-```
-core-02 ~ # consul members
-Node     Address            Status  Type    Build  Protocol  DC   Segment
-core-01  172.17.8.101:8301  alive   server  0.9.3  2         dc1  <all>
-core-02  172.17.8.102:8301  alive   server  0.9.3  2         dc1  <all>
+core@core-04 ~ $ consul kv get kon/config
+...
+ETCD_INITIAL_CLUSTER=\
+core-03=http://172.17.8.103:2380,\
+core-04=http://172.17.8.104:2380,\
+core-05=http://172.17.8.105:2380
+...
 ```
 
-### 3 Install Nomad
-
-Install Nomad the same way as you did on the first node:
+Then you can se that we have for etcd nodes. If you check the nomad config:
 ```
-core-02 ~ # kon install nomad
+core@core-04 ~ $ cat /etc/nomad/client.hcl | grep node_class
+  node_class = "etcd,kubelet"
 ```
+Then you'll se that these nodes have the `node_class` set to `etcd`.
 
-Repeat these steps for the rest of the nodes.
-
-## Step 6
-
-Up to now we've only been starting our infrastructure for running Kubernetes. Now it's time
-to start bringing Kubernetes up and running.
+Now it's time to start `etcd`:
+```
+```
+ 
 
 
 

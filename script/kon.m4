@@ -2,13 +2,9 @@
 
 help_msg () {
   cat <<EOF
-Install Commands:
-  install nomad
-  install kube             Installs kubernetes components: kubelet, kubeadm and kubectl
-
 Generate Commands:
   generate init            Generates a sample /etc/kon.conf file
-  generate all             Generates certificates and kubeconfigs.
+  generate all             Generates etcd configuration, certificates and kubeconfigs.
   generate etcd            Reads the etcd configuration and stores it in consul.
   generate certificates    Generates all certificates and stores them in consul. The command only generates missing certificates and is safe to be run multiple times.
   generate kubeconfigs     Generates all kubeconfig-files and stores them in consul.
@@ -32,13 +28,19 @@ Consul Commands:
   consul dns enable        Enables all DNS lookups through Consul
   consul dns disable       Disables all DNS lookups through Consul and restores the original config
 
+Kubernetes Commands:
+  kubernetes install       Installs kubernetes components: kubelet, kubeadm and kubectl
+  kubernetes reset         Stopps kubernetes control plane and deletes all certificates and configuration.
+
+Nomad Commands:
+  nomad install            Installs Nomad
+  nomad start              Starts Nomad
+  nomad restart            Restarts Nomad
+  nomad stop               Stops Nomad 
+
 Other Commands:
-  consul dns enable        Enables all DNS lookups through Consul
-  consul dns disable       Disables all DNS lookups through Consul and restores the original config
   addon dns                Installs dns addon.
   setup kubectl            Configures kubectl for accessing the cluster.
-  start bootstrap consul
-  start consul
 
 EOF
 }
@@ -49,6 +51,7 @@ exit 11  #)Created by argbash-init v2.5.0
 # ARG_OPTIONAL_SINGLE([config], c, [Configuration file to use], [])
 # ARG_OPTIONAL_SINGLE([interface], i, [Network interface to use for Consul bind address], [])
 # ARG_OPTIONAL_SINGLE([bootstrap], b, [Bootstrap Consul Server], [])
+# ARG_OPTIONAL_BOOLEAN([debug], d, [Run kon in debug mode (bash -x)], [])
 # ARG_OPTIONAL_BOOLEAN([print], , [A boolean option with long flag (and implicit default: off)])
 # ARG_POSITIONAL_MULTI([command], [Positional arg description], [3], [""])
 # ARG_HELP([KON helps you setup and run Kubernetes On Nomad (KON).\n], [$(help_msg)])
@@ -63,6 +66,7 @@ then
   echo "Command arg value: '${_arg_command[*]}'"
   echo "Optional arg '--config|-c' value: '$_arg_config'"
   echo "Optional arg '--bootstrap|-b' value: '$_arg_bootstrap'"
+  echo "Optional arg '--debug|-d' value: '$_arg_debug'"
   echo "Optional arg '--interface|-i' value: '$_arg_interface'"
 fi
 

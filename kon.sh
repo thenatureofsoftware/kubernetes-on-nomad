@@ -1,10 +1,10 @@
 #!/bin/bash
 
+BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 # Installation directory for all scripts.
 KON_INSTALL_DIR=${INSTALL_DIR:=/etc/kon}
 
-# Should be the same as KON_INSTALL_DIR.
-BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SCRIPTDIR=$BASEDIR/script
 BINDIR=${BINDIR:=/opt/bin}
 JOBDIR=$BASEDIR/nomad/job
@@ -18,7 +18,7 @@ K8S_PKIDIR=${K8S_PKIDIR:=$K8S_CONFIGDIR/pki}
 CONSUL_VERSION=${CONSUL_VERSION:=0.9.3}
 
 # Nomad
-NOMAD_VERSION=${NOMAD_VERSION:=0.6.3}
+NOMAD_VERSION=${NOMAD_VERSION:=0.7.0-beta1}
 
 MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:=9B4T6UOOQNQRRHSAWVPY}
 MINIO_SECRET_KEY=${MINIO_SECRET_KEY:=HtcN68VAx0Ty5UslYokP6UA3OBfWVMFDZX6aJIfh}
@@ -66,7 +66,6 @@ kon::config () {
     mkdir -p $KON_INSTALL_DIR
     avtive_config=""
     
-    info "Config args: $_arg_config"
     if [ ! "$_arg_config" == "" ] && [ -f "$_arg_config" ]; then
         active_config=$_arg_config
     elif [ -f "$KON_CONFIG" ]; then
@@ -86,6 +85,7 @@ kon::config () {
 # Generates certificates and stores them in consul
 ###############################################################################
 kon::generate_certificates () {
+    if [ ! "$(common::which kubeadm)" ]; then fail "kubeadm not installed, please install it first (kon kubernetes install)"; fi
     info "Cleaning up any certificates in $K8S_PKIDIR"
     if [ -d "$K8S_PKIDIR" ]; then
         rm -rf $K8S_PKIDIR/*
@@ -193,15 +193,6 @@ kon::get_cert_and_key() {
 kon::reset_etcd () {
     info "$(nomad stop etcd)"
     info "$(consul kv delete -recurse etcd)"
-}
-
-###############################################################################
-# Stopps and removes kubernetes.
-###############################################################################
-kon::reset_kubernetes () {
-    info "$(nomad stop kube-control-plane)"
-    info "$(nomad stop kubelet)"
-    info "$(consul kv delete -recurse kubernetes)"
 }
 
 bootstrap::run_object_store () {
@@ -374,24 +365,6 @@ reset-etcd () {
     kon::reset_etcd
 }
 
-reset-kubernetes () {
-    kon::reset_kubernetes
-}
-
-###############################################################################
-# Enables all DNS lookups through Consul.
-###############################################################################
-consul-dns-disable () {
-    consul::enable-consul-dns
-}
-
-###############################################################################
-# Disables all DNS lookups through Consul and restores the original config.
-###############################################################################
-consul-dns-disable () {
-   consul::disable-consul-dns
-}
-
 start-all () {
   start-etcd
   sleep 5
@@ -402,11 +375,20 @@ start-all () {
   start-control-plane
 }
 
-start-etcd () {
+etcd-start () {
+    nomad::check
     info "Starting etcd ..."
     info "$(nomad run $JOBDIR/etcd.nomad)"
+    common::error_on_error "etcd start failed"
     sleep 5
     info "etcd job status after 5 sec:\n$(nomad job status etcd)"
+}
+
+etcd-stop () {
+    nomad::check
+    info "Stopping etcd ..."
+    info "$(nomad stop -purge etcd)"
+    common::error_on_error "etcd stop failed"
 }
 
 start-kubelet () {
@@ -464,15 +446,45 @@ setup-kubectl () {
     fi
 }
 
-install-kube () {
-    kubelet::install
+kubernetes-install () {
+    kubernetes::install
 }
 
+kubernetes-reset () {
+    kubernetes::reset
+}
 
-install-nomad () {
+###############################################################################
+# Downloads and installs Nomad in BINDIR.
+###############################################################################
+nomad-install () {
     nomad::install
 }
 
+###############################################################################
+# Installs the service unit file and starts nomad
+###############################################################################
+nomad-start() {
+    nomad::start
+}
+
+###############################################################################
+# Is covered by nomad::start
+###############################################################################
+nomad-restart() {
+    nomad::start
+}
+
+###############################################################################
+# Stops Nomad
+###############################################################################
+nomad-stop() {
+    nomad::stop
+}
+
+###############################################################################
+# Downloads and installs Consul in BINDIR.
+###############################################################################
 consul-install () {
     consul::install
 }
@@ -487,6 +499,8 @@ consul-start-bootstrap () {
         info "Bootstrap Consul is already running"
     else 
         consul::start-bootstrap
+        common::fail_on_error "Failed to start consul"
+
         consul::wait_for_started
     fi
 
@@ -500,9 +514,8 @@ consul-start-bootstrap () {
 }
 
 consul-start () {
-    if [ -z "$(which consul)" ]; then
-        error "Please install Consul binaries first (kon install consul)"
-        exit 1
+    if [ "$(common::which consul)" == "" ]; then
+        fail "Please install Consul binaries first (kon consul install)"
     fi
     
     if [ ! "$_arg_bootstrap" == "" ]; then
@@ -519,6 +532,8 @@ consul-start () {
         info "Consul is already running"
     else 
         consul::start
+        common::fail_on_error "Failed to start consul"
+
         consul::wait_for_started
     fi
 
@@ -535,11 +550,30 @@ consul-start () {
             info "Reloading configuration from Consul."
             source $KON_CONFIG
             info "Restarting Consul after new configuration"
+            
             consul::stop
+            common::fail_on_error "Failed to stop consul"
+
             consul::start
+            common::fail_on_error "Failed to start consul"
+
             consul::wait_for_started
         fi
     fi
+}
+
+###############################################################################
+# Enables all DNS lookups through Consul.
+###############################################################################
+consul-dns-enable () {
+    consul::enable-consul-dns
+}
+
+###############################################################################
+# Disables all DNS lookups through Consul and restores the original config.
+###############################################################################
+consul-dns-disable () {
+   consul::disable-consul-dns
 }
 
 ###############################################################################
@@ -569,44 +603,29 @@ fi
 
 consul_version="Consul not installed"
 nomad_version="Nomad not installed"
-if [ ! -z "$(common::check_cmd consul)" ]; then consul_version="$(consul version|grep Consul)"; fi
-if [ ! -z "$(common::check_cmd nomad)" ]; then nomad_version="$(nomad version)"; fi
+kubernetes_version="kubelet not installed"
+kubeadm_version="kubeadm not installed"
+if [ "$(common::which consul)" ]; then consul_version="$(consul version|grep Consul)"; fi
+if [ "$(common::which nomad)" ]; then nomad_version="$(nomad version)"; fi
+if [ "$(common::which kubelet)" ]; then kubernetes_version="$(kubelet --version)"; fi
+if [ "$(common::which kubeadm)" ]; then kubeadm_version="kubeadm $(kubeadm version|awk -F':' '{ print $5 }'|awk -F',' '{print $1}'|sed 's/\"//g')"; fi
 cat $SCRIPTDIR/banner.txt
-printf "$nomad_version, $consul_version, Kubernetes $K8S_VERSION, kubeadm $KUBEADM_VERSION\n\n"
+printf "$nomad_version, $consul_version, $kubernetes_version, $kubeadm_version\n\n"
 
 ###############################################################################
-# Parse arguments                                                             #
+# argbash
 ###############################################################################
 parse_commandline "$@"
 handle_passed_args_count
 assign_positional_args
+
+if [ $_arg_debug == on ]; then set -x; fi
 
 ###############################################################################
 # Load configuration                                                          #
 ###############################################################################
 kon::config
 
-log "Config: $KON_CONFIG"
-log "Binaries: $BINDIR"
-
-# OTHER STUFF GENERATED BY Argbash
-
-### END OF CODE GENERATED BY Argbash (sortof) ### ])
-# [ <-- needed because of Argbash
-
-
-if [ "$_arg_print" = on ]
-then
-  echo "Command arg value: '${_arg_command[*]}'"
-  echo "Optional arg '--config|-c' value: '$_arg_config'"
-  echo "Optional arg '--bootstrap|-b' value: '$_arg_bootstrap'"
-else
-  echo "Not telling anything, print not requested"
-fi
-
-# ] <-- needed because of Argbash
-
-info "Command line args: $1 $2 $3 $4 $5"
 ###############################################################################
 # Execute command                                                             #
 ###############################################################################
@@ -614,7 +633,7 @@ info "Command line args: $1 $2 $3 $4 $5"
 result=$?
 if [ $result -eq 127 ]; then
     error "Command not found!"
-    kon::help
+    print_help
 fi
 
 

@@ -4,8 +4,12 @@
 setup.env
 nomad_cluster_up.sh
 Vagrantfile
-tmp
-consul
-vault
-kon
 README.md
+kon
+argbash
+
+consul
+examples
+tests
+tmp
+vault

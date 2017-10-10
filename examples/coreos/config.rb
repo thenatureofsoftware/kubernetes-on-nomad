@@ -65,7 +65,7 @@ end
 
 # Customize VMs
 #$vm_gui = false
-$vm_memory = 2048
+$vm_memory = 1024
 $vm_cpus = 2
 #$vb_cpuexecutioncap = 100
 

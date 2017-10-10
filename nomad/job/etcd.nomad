@@ -2,28 +2,14 @@ job "etcd" {
   region = "global"
   datacenters = ["dc1"]
   type = "system"
-
-  update {
-    max_parallel = 1
-    min_healthy_time = "10s"
-    healthy_deadline = "3m"
-    auto_revert = false
-    canary = 0
-  }
-
+  priority = 100
 
   group "etcd-grp" {
-    count = 1
 
     constraint {
       attribute = "${node.class}"
       operator  = "set_contains"
       value   = "etcd"
-    }
-
-    ephemeral_disk {
-      migrate = true
-      size = 500
     }
 
     task "etcd" {

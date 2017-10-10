@@ -16,7 +16,7 @@ consul::install () {
     rm -f consul_${CONSUL_VERSION}_linux_amd64.zip*
     
     # Check consul is working
-    consul version > /dev/null 2>&1
+    consul version > "$(common::dev_null)" 2>&1
     if [ $? -eq 0 ]; then
         info "$(consul version|grep Consul) installed"
     else
@@ -73,6 +73,9 @@ consul::disable-consul-dns () {
 }
 
 consul::start-bootstrap () {
+
+    if [ -n "$KON_DEV" ]; then fail "Can't start bootstrap in development mode, use nomad start instead."; fi
+
     # Save the current nameserver
     kon_nameserver=$(cat /etc/resolv.conf | grep nameserver | head -1 | awk '{print $2}')
     if [ "$kon_nameserver" == "" ] || [ "$kon_nameserver" == "127.0.0.1" ]; then
@@ -84,7 +87,6 @@ consul::start-bootstrap () {
     docker run -d --name kon-consul \
     --restart=always \
     --network=host \
-    --memory=500m \
     -v /var/lib/consul:/consul/data \
     -e 'CONSUL_ALLOW_PRIVILEGED_PORTS=true' \
     -e 'CONSUL_CLIENT_INTERFACE=lo' \
@@ -117,13 +119,18 @@ consul::start () {
         fi
     fi
 
+    if [ -n "$KON_DEV" ]; then
+        consul::start_dev
+        common::fail_on_error "Failed to start consul in development mode."
+        return 0;
+    fi
+
     info "Starting Consul $agent_type ..."
     consul::bind_interface
 
     docker run -d --name kon-consul \
     --restart=always \
     --network=host \
-    --memory=500m \
     -v /var/lib/consul:/consul/data \
     -e 'CONSUL_ALLOW_PRIVILEGED_PORTS=true' \
     -e 'CONSUL_CLIENT_INTERFACE=lo' \
@@ -135,6 +142,25 @@ consul::start () {
 
     info "Switching nameserver to consul"
     consul::enable-consul-dns
+}
+
+consul::start_dev () {
+    info "Starting Consul in development mode ..."
+    consul::bind_interface
+
+    docker run -d --name kon-consul \
+    --restart=always \
+    --network=host \
+    -v /var/lib/consul:/consul/data \
+    -e 'CONSUL_ALLOW_PRIVILEGED_PORTS=true' \
+    -e 'CONSUL_CLIENT_INTERFACE=lo' \
+    -e "CONSUL_BIND_INTERFACE=$CONSUL_BIND_INTERFACE" \
+    consul:$CONSUL_VERSION agent -dev \
+    -dns-port=53 \
+    -recursor=$kon_nameserver
+
+    info "Switching nameserver to consul"
+    consul::enable-consul-dns   
 }
 
 consul::stop () {

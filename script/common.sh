@@ -1,6 +1,7 @@
 #!/bin/bash
 
 log () {
+    _exit_value=$?
     common::log "Info" "$1"
 }
 
@@ -8,10 +9,12 @@ log () {
 # Logs info level message
 ###############################################################################
 info () {
+    _exit_value=$?
     common::log "Info" "$1"
 }
 
 error () {
+    _exit_value=$?
     common::log "Error" "$1"
 }
 
@@ -20,17 +23,31 @@ error () {
 ###############################################################################
 fail() {
     error "$1"
-    exit 1
+    if [ ! "$_test_" ]; then exit 1; fi
 }
 
 common::log () {
-    if [ -n $NO_LOG ]; then return; fi
+
+    if [ "$NO_LOG" == "true" ]; then return 0; fi
+
     DATE='date +%Y/%m/%d:%H:%M:%S'
     if [ $# -lt 2 ]; then
-        printf "["`$DATE`" Info] $1\n" | awk '{$1=$1};1' | tee -a > /dev/null 2>&1
+        printf "["`$DATE`" Info] $1\n" | awk '{$1=$1};1' | tee -a "$(common::logfile)"
     else
         MSG="$2 $3 $4 $5 $6 $7 $8 $9"
-        printf "["`$DATE`" $1] $MSG\n" | awk '{$1=$1};1' | tee -a > /dev/null 2>&1
+        printf "["`$DATE`" $1] $MSG\n" | awk '{$1=$1};1' | tee -a "$(common::logfile)"
+    fi
+}
+
+common::logfile() {
+    if [ "$NO_LOG" == "true" ]; then
+        echo "$(common::dev_null)"
+    else
+        if [ "$KON_LOG_FILE" == "" ]; then
+            echo "/var/log/kon.log"
+        else
+            echo "$KON_LOG_FILE"
+        fi
     fi
 }
 
@@ -41,11 +58,61 @@ common::check_root () {
     fi
 }
 
+###############################################################################
+# Check if binary is installed.
+# Example: if [ -z "$common::check_cmd nomad" ]; then fail "Not installed"; fi
+###############################################################################
 common::check_cmd () {
-    echo "common::check $1"
-    type $1 >/dev/null 2>&1 || {
-        info "This script requires $1 but it's not installed."
+    type $1 > "$(common::dev_null)" 2>&1 || {
+        echo "$1 not found"
     }
+}
+
+###############################################################################
+# Check if binary is installed.
+# Easier to understand than common::check_cmd.
+# Returns the path if command is installed, else ""
+###############################################################################
+common::which () {
+    local found=true
+    type $1 > "$(common::dev_null)" 2>&1 || {
+        unset found
+    }
+    if [ "$found" ]; then echo "$(which $1)"; fi
+}
+
+###############################################################################
+# Fails with a message it there's an non zero value from last cmd.
+###############################################################################
+common::fail_on_error () {
+    _exit_value=$?
+    if [ $_exit_value -gt 0 ]; then
+        if [ "$1" ]; then
+            fail "$1"
+        else
+            fail "A command returned non-zero exit: $_exit_value"
+        fi
+    fi
+}
+
+###############################################################################
+# Fails with a message it there's an non zero value from last cmd.
+###############################################################################
+common::error_on_error () {
+    local _current_exit_value=$?
+    if [ "$_exit_value" == "" ]; then
+        _exit_value=$_current_exit_value
+    fi
+
+    if [ $_exit_value -gt 0 ]; then
+        if [ "$1" ]; then
+            error "$1"
+        else
+            error "A command returned non-zero exit: $_exit_value"
+        fi
+    fi
+
+    unset _exit_value
 }
 
 ###############################################################################
@@ -61,6 +128,14 @@ common::mk_bindir () {
     fi
 }
 
+common::dev_null () {
+    if [ -e "/dev/zero" ]; then
+        printf "%s" "/dev/null";
+    elif [ -e "/dev/null" ]; then
+        printf "%s" "/dev/zero"
+    fi
+}
+
 common::install () {
     sudo apt-get update && sudo apt-get install -y $1 && sudo apt-get clean
 }
@@ -70,7 +145,7 @@ common::service_address () {
 }
 
 common::rm_all_running_containers () {
-    docker rm -f `docker ps -q` > /dev/null 2>&1
+    docker rm -f `docker ps -q` > "$(common::dev_null)" 2>&1
 }
 
 common::ip_addr () {
@@ -91,7 +166,7 @@ common::os () {
         . /etc/os-release
         OS=$NAME
         VER=$VERSION_ID
-    elif type lsb_release >/dev/null 2>&1; then
+    elif type lsb_release > "$(common::dev_null)" 2>&1; then
         # linuxbase.org
         OS=$(lsb_release -si)
         VER=$(lsb_release -sr)
@@ -130,6 +205,7 @@ common::generate_config_template () {
 # Kubernetes version
 ###############################################################################
 K8S_VERSION=${K8S_VERSION:=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)}
+CNI_VERSION=${CNI_VERSION:=v0.6.0}
 
 ###############################################################################
 # kubeadm version
