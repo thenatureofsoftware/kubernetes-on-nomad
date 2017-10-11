@@ -180,7 +180,26 @@ consul::wait_for_started () {
 }
 
 consul::put () {
+    if [ "$1" == "" ] || [ "$2" == "" ]; then fail "invalid argument, key or value can't be empty"; fi
     info "$(consul kv put $1 $2) value: $2"
+}
+
+consul::get () {
+    if [ "$1" == "" ]; then fail "invalid first argument, can't be empty"; fi
+    local _value=$(consul kv get $1)
+    if [ "$?" -eq 0 ]; then echo "$_value"; fi
+}
+
+consul::delete () {
+    if [ "$1" == "" ]; then fail "invalid first argument, can't be empty"; fi
+    consul kv delete -recurse $1
+    common::fail_on_error "delete of key:$1 failed"
+}
+
+consul::fail_if_missing_key () {
+    if [ "$1" == "" ]; then fail "invalid first argument, can't be empty"; fi
+    consul kv get $1 > "$(common::dev_null)" 2>&1
+    if [ "$?" -gt 0 ]; then fail "$2"; fi
 }
 
 consul::put_file () {

@@ -2,6 +2,11 @@
 
 help_msg () {
   cat <<EOF
+Setup Commands (high level):
+  setup node bootstrap     Installs and starts all software needed for running Kubernetes on bootstrap node.
+  setup node               Installs and starts all software needed for running Kubernetes on node.
+  setup kubectl            Configures kubectl for accessing the cluster.
+
 Generate Commands:
   generate init            Generates a sample /etc/kon.conf file
   generate all             Generates etcd configuration, certificates and kubeconfigs.
@@ -10,8 +15,6 @@ Generate Commands:
   generate kubeconfigs     Generates all kubeconfig-files and stores them in consul.
 
 Start Commands:
-  start all
-  start etcd
   start kubelet
   start kube-proxy
   start control-plane
@@ -28,19 +31,25 @@ Consul Commands:
   consul dns enable        Enables all DNS lookups through Consul
   consul dns disable       Disables all DNS lookups through Consul and restores the original config
 
-Kubernetes Commands:
-  kubernetes install       Installs kubernetes components: kubelet, kubeadm and kubectl
-  kubernetes reset         Stopps kubernetes control plane and deletes all certificates and configuration.
-
 Nomad Commands:
   nomad install            Installs Nomad
   nomad start              Starts Nomad
   nomad restart            Restarts Nomad
-  nomad stop               Stops Nomad 
+  nomad stop               Stops Nomad
+
+Etcd Commands:
+  etcd start               Starts the etcd cluster.
+  etcd stop                Stopps the etcd cluster.
+  etcd reset               Stopps etcd and deletes all configuration.
+
+Kubernetes Commands:
+  kubernetes start         Starts all Kubernetes components
+  kubernetes install       Installs kubernetes components: kubelet, kubeadm and kubectl
+  kubernetes reset         Stopps kubernetes control plane and deletes all certificates and configuration.
 
 Other Commands:
   addon dns                Installs dns addon.
-  setup kubectl            Configures kubectl for accessing the cluster.
+  view status              Shows kon status.
 
 EOF
 }
@@ -51,6 +60,7 @@ exit 11  #)Created by argbash-init v2.5.0
 # ARG_OPTIONAL_SINGLE([config], c, [Configuration file to use], [])
 # ARG_OPTIONAL_SINGLE([interface], i, [Network interface to use for Consul bind address], [])
 # ARG_OPTIONAL_SINGLE([bootstrap], b, [Bootstrap Consul Server], [])
+# ARG_OPTIONAL_BOOLEAN([quiet], q, [Run kon quiet, default: off], [off])
 # ARG_OPTIONAL_BOOLEAN([debug], d, [Run kon in debug mode (bash -x)], [])
 # ARG_OPTIONAL_BOOLEAN([print], , [A boolean option with long flag (and implicit default: off)])
 # ARG_POSITIONAL_MULTI([command], [Positional arg description], [3], [""])

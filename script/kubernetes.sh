@@ -70,17 +70,3 @@ kubernetes::download_and_install() {
     mv $1 $BINDIR
     info "Done installing $1"
 }
-
-###############################################################################
-# Stopps and removes kubernetes.
-###############################################################################
-kubernetes::reset () {
-    nomad stop kube-control-plane
-    common::error_on_error "Failed to stop kubernetes control-plane in Nomad."
-
-    nomad stop kubelet
-    common::error_on_error "Failed to stop kubelet in Nomad."
-
-    consul kv delete -recurse kubernetes
-    common::error_on_error "Failed to delete kubernetes key in Consul."
-}

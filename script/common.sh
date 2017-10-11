@@ -2,7 +2,7 @@
 
 log () {
     _exit_value=$?
-    common::log "Info" "$1"
+    common::log "info" "$1"
 }
 
 ###############################################################################
@@ -10,12 +10,17 @@ log () {
 ###############################################################################
 info () {
     _exit_value=$?
-    common::log "Info" "$1"
+    common::log "info" "$1"
+}
+
+warn () {
+    _exit_value=$?
+    common::log "warn" "$1"
 }
 
 error () {
     _exit_value=$?
-    common::log "Error" "$1"
+    common::log "error" "$1"
 }
 
 ###############################################################################
@@ -51,9 +56,12 @@ common::logfile() {
     fi
 }
 
+###############################################################################
+# Checks that the script is run as root
+###############################################################################
 common::check_root () {
     if [[ $EUID -ne 0 ]]; then
-        error "This script must be run as root"
+        error "this script must be run as root"
         exit 1
     fi
 }
@@ -90,7 +98,7 @@ common::fail_on_error () {
         if [ "$1" ]; then
             fail "$1"
         else
-            fail "A command returned non-zero exit: $_exit_value"
+            fail "a command returned non-zero exit: $_exit_value"
         fi
     fi
 }
@@ -108,7 +116,7 @@ common::error_on_error () {
         if [ "$1" ]; then
             error "$1"
         else
-            error "A command returned non-zero exit: $_exit_value"
+            error "a command returned non-zero exit: $_exit_value"
         fi
     fi
 
@@ -160,6 +168,16 @@ common::is_server () {
     fi
 }
 
+common::view_print () {
+    local padlength=$1
+    local pad=$2
+    local key=$3
+    local val=$4
+    printf '%s' "$key"
+    printf '%*.*s' 0 $((padlength - ${#key} )) "$pad"
+    printf '%s\n' "$val"
+}
+
 common::os () {
     if [ -f /etc/os-release ]; then
         # freedesktop.org and systemd
@@ -196,7 +214,7 @@ common::os () {
 function common::join_by { local IFS="$1"; shift; echo "$*"; }
 
 common::generate_config_template () {
-  info "Generating sample configuration file $KON_CONFIG"
+  info "generating sample configuration file $KON_CONFIG"
   mkdir -p $KON_INSTALL_DIR
   cat <<EOF > $KON_CONFIG
 #!/bin/bash
