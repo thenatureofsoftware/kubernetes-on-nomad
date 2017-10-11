@@ -42,6 +42,7 @@ kubeProxyStateKey="$stateKey/kube-proxy"
 kubeApiServerStateKey="$stateKey/kube-apiserver"
 kubeSchedulerStateKey="$stateKey/kube-scheduler"
 controllerMgrStateKey="$stateKey/kube-controller-manager"
+kubernetesStateKey="$stateKey/kubernetes"
 
 kubernetesKey="kubernetes"
 controllerMgrKubeconfigKey="$kubernetesKey/controller-manager/kubeconfig"
@@ -57,6 +58,12 @@ etcdKey="etcd"
 etcdServersKey="$etcdKey/servers"
 etcdInitialClusterKey="$etcdKey/initial-cluster"
 etcdInitialClusterTokenKey="$etcdKey/initial-cluster-token"
+
+STOPPED="stopped"
+STARTED="started"
+RUNNIG="running"
+CONFIGURED="configured"
+OK="OK"
 
 ###############################################################################
 # Installs kon scripts                                                        #
@@ -110,7 +117,7 @@ kon::config () {
 
         if [ -f "$KON_CONFIG" ]; then
             consul::put_file $konConfig $KON_CONFIG > "$(common::dev_null)" 2>&1
-            if [ $? -eq 0 ]; then consul::put $configStateKey "loaded"; fi
+            if [ $? -eq 0 ]; then consul::put $configStateKey $OK; fi
         fi
     fi
 }
@@ -146,7 +153,7 @@ kon::generate_certificates () {
     kon::put_cert_and_key "front-proxy-client"
     kon::put_cert_and_key "sa"
 
-    consul::put $certificateStateKey "generated"
+    consul::put $certificateStateKey $OK
 }
 
 ###############################################################################
@@ -186,7 +193,7 @@ kon::generate_kubeconfigs () {
     info "kubeconfig for admin\n$(kubectl --kubeconfig=$K8S_CONFIGDIR/admin.conf config view)"
     info "\n$(consul::put_file $adminKubeconfigKey $K8S_CONFIGDIR/admin.conf)"
 
-    consul::put $kubeconfigStateKey "generated"
+    consul::put $kubeconfigStateKey $OK
 }
 
 ###############################################################################
@@ -268,7 +275,10 @@ kon::load_etcd_config () {
     consul::put $etcdInitialClusterKey "$ETCD_INITIAL_CLUSTER"
     consul::put $etcdInitialClusterTokenKey "$ETCD_INITIAL_CLUSTER_TOKEN"
 
-    consul::put $etcdStateKey "configured"
+    currentState=$(consul::get $etcdStateKey)
+    if [ ! "$currentState" == $STARTED ] && [ ! "$currentState" == $RUNNING ]; then
+        consul::put $etcdStateKey $CONFIGURED
+    fi
 }
 
 kon::load_kube_proxy_config () {
@@ -285,7 +295,7 @@ kon::load_kube_proxy_config () {
     consul::put $kubeProxyClusterCidrKey "$POD_CLUSTER_CIDR"
     consul::put $kubeProxyMasterKey "$KUBE_APISERVER_ADDRESS"
 
-    consul::put $kubeProxyStateKey "configured"
+    consul::put $kubeProxyStateKey $OK
 }
 
 ###############################################################################
@@ -491,26 +501,26 @@ kubernetes-install () {
 
 kubernetes-reset () {
     kubernetes-stop
-    consul::delete "kubernetes"
-    consul::put "kon/state/certificates" "empty"
-    consul::put "kon/state/kubeconfig" "empty"
+    consul::delete $kubernetesKey
+    consul::put $certificateStateKey "-"
+    consul::put $kubeconfigStateKey "-"
 }
 
 kubernetes-start () {
-    if [ ! "$(consul::get $certificateStateKey)" == "generated" ]; then fail "certificates missing"; fi
-    if [ ! "$(consul::get $kubeconfigStateKey)" == "generated" ]; then fail "kubeconfig missing"; fi
-    if [ ! "$(consul::get $etcdStateKey)" == "started" ] && [ ! "$(consul::get $etcdStateKey)" == "running" ]; then fail "etcd is not started"; fi
+    if [ ! "$(consul::get $certificateStateKey)" == "OK" ]; then fail "certificates missing"; fi
+    if [ ! "$(consul::get $kubeconfigStateKey)" == "OK" ]; then fail "kubeconfig missing"; fi
+    if [ ! "$(consul::get $etcdStateKey)" == "$STARTED" ] && [ ! "$(consul::get $etcdStateKey)" == "$RUNNIG" ]; then fail "etcd is not started"; fi
     start-control-plane
     start-kubelet
     start-kube-proxy
-    consul::put "kon/state/kubernetes" "started"
+    consul::put $kubernetesStateKey $STARTED
 }
 
 kubernetes-stop () {
     stop-control-plane
     stop-kubelet
     stop-kube-proxy
-    consul::put "kon/state/kubernetes" "stopped"
+    consul::put "kon/state/kubernetes" $STOPPED
 }
 
 ###############################################################################
