@@ -13,11 +13,7 @@ sudo mkdir -p /opt/bin \
 && sudo chmod a+x /opt/bin/kon \
 && sudo mkdir /etc/kon \
 && sudo cp /example/kon.conf /etc/kon/ \
-&& sudo kon consul install \
-&& sudo kon --interface eth1 consul start bootstrap \
-&& sudo kon nomad install \
-&& sudo kon nomad start \
-&& sudo kon kubernetes install"
+&& sudo kon --interface eth1 setup node bootstrap"
 
 node_cmd="\
 sudo mkdir -p /opt/bin \
@@ -25,18 +21,12 @@ sudo mkdir -p /opt/bin \
 && sudo chmod a+x /opt/bin/kon \
 && sudo mkdir /etc/kon \
 && sudo cp /example/kon.conf /etc/kon/ \
-&& sudo kon consul install \
-&& sudo kon --bootstrap 172.17.8.101 --interface eth1 consul start  \
-&& sudo kon nomad install \
-&& sudo kon nomad start \
-&& sudo kon kubernetes install"
+&& sudo kon --bootstrap 172.17.8.101 --interface eth1 setup node"
 
 kubernetes_cmd="\
 sudo kon generate all \
 && sudo kon etcd start \
-&& sudo kon start control-plane \
-&& sudo kon start kubelet \
-&& sudo kon start kube-proxy \
+&& sudo kon start kubernetes \
 && sudo sleep 30 \
 && sudo kon setup kubectl"
 

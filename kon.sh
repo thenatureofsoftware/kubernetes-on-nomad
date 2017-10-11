@@ -499,7 +499,7 @@ kubernetes-reset () {
 kubernetes-start () {
     if [ ! "$(consul::get $certificateStateKey)" == "generated" ]; then fail "certificates missing"; fi
     if [ ! "$(consul::get $kubeconfigStateKey)" == "generated" ]; then fail "kubeconfig missing"; fi
-    if [ ! "$(consul::get $etcdStateKey)" == "started" ]; then fail "etcd is not started"; fi
+    if [ ! "$(consul::get $etcdStateKey)" == "started" ] && [ ! "$(consul::get $etcdStateKey)" == "running" ]; then fail "etcd is not started"; fi
     start-control-plane
     start-kubelet
     start-kube-proxy
@@ -507,7 +507,6 @@ kubernetes-start () {
 }
 
 kubernetes-stop () {
-    if [ ! "$(consul::get "kon/state/kubernetes")" == "started" ]; then warn "kubernetes is not started"; fi
     stop-control-plane
     stop-kubelet
     stop-kube-proxy
