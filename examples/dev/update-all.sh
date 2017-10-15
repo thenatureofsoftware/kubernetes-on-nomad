@@ -12,6 +12,7 @@ mkdir -p $target_job_dir
 mkdir -p /opt/bin
 
 cp /kon-src/kon /opt/bin/
+cp /kon-src/version $target_basedir
 cp /kon-src/kon.sh $target_basedir
 cp $src_script_dir/*.txt $target_script_dir/
 cp $src_script_dir/*.sh $target_script_dir/

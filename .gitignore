@@ -1,6 +1,6 @@
 
 tmp
-kon.conf
+./kon.conf
 setup.env
 
 **/*.img

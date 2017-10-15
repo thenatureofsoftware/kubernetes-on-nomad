@@ -2,8 +2,10 @@
 
 help_msg () {
   cat <<EOF
+Alpha Commands:
+  cluster start            Starts all given a kon.conf file.
+
 Setup Commands (high level):
-  setup node bootstrap     Installs and starts all software needed for running Kubernetes on bootstrap node.
   setup node               Installs and starts all software needed for running Kubernetes on node.
   setup kubectl            Configures kubectl for accessing the cluster.
 
@@ -58,14 +60,12 @@ EOF
 echo "This is just a script template, not the script (yet) - pass it to 'argbash' to fix this." >&2
 exit 11  #)Created by argbash-init v2.5.0
 # ARG_OPTIONAL_SINGLE([config], c, [Configuration file to use], [])
-# ARG_OPTIONAL_SINGLE([interface], i, [Network interface to use for Consul bind address], [])
-# ARG_OPTIONAL_SINGLE([bootstrap], b, [Bootstrap Consul Server], [])
-# ARG_OPTIONAL_BOOLEAN([quiet], q, [Run kon quiet, default: off], [off])
-# ARG_OPTIONAL_BOOLEAN([debug], d, [Run kon in debug mode (bash -x)], [])
+# ARG_OPTIONAL_BOOLEAN([debug], , [Run kon in debug mode (bash -x)], [off])
+# ARG_OPTIONAL_BOOLEAN([quiet], , [Quiet mode, output less], [off])
 # ARG_OPTIONAL_BOOLEAN([print], , [A boolean option with long flag (and implicit default: off)])
 # ARG_POSITIONAL_MULTI([command], [Positional arg description], [3], [""])
 # ARG_HELP([KON helps you setup and run Kubernetes On Nomad (KON).\n], [$(help_msg)])
-# ARG_VERSION([echo kon v0.1-alpha])
+# ARG_VERSION([echo $(cat $BASEDIR/version)])
 # ARGBASH_SET_INDENT([  ])
 # ARGBASH_GO
 
@@ -76,7 +76,8 @@ then
   echo "Command arg value: '${_arg_command[*]}'"
   echo "Optional arg '--config|-c' value: '$_arg_config'"
   echo "Optional arg '--bootstrap|-b' value: '$_arg_bootstrap'"
-  echo "Optional arg '--debug|-d' value: '$_arg_debug'"
+  echo "Optional arg '--debug' value: '$_arg_debug'"
+  echo "Optional arg '--quiet' value: '$_arg_quiet'"
   echo "Optional arg '--interface|-i' value: '$_arg_interface'"
 fi
 

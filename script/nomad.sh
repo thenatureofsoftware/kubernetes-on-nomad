@@ -101,7 +101,7 @@ nomad::client_config () {
     # node_class variable
     node_class=()
     if [ ! -n "$ETCD_INITIAL_CLUSTER" ]; then fail "ETCD_INITIAL_CLUSTER is not set, is KON_CONFIG loaded?"; fi
-    if [ ! -n "$KUBE_MINIONS" ]; then fail "KUBE_MINIONS is not set, is KON_CONFIG loaded?"; fi
+    if [ ! -n "$KON_MINIONS" ]; then fail "KON_MINIONS is not set, is KON_CONFIG loaded?"; fi
 
     # Resolve ip-address
     if [ ! -n "$nomad_advertise_ip" ]; then
@@ -116,7 +116,7 @@ nomad::client_config () {
         node_class+=('etcd')
     fi
 
-    if [ -n "$(echo $KUBE_MINIONS | grep $nomad_advertise_ip)" ]; then
+    if [ -n "$(echo $KON_MINIONS | grep $nomad_advertise_ip)" ]; then
         node_class+=('kubelet')
     fi
 
@@ -134,8 +134,12 @@ nomad::run_job () {
     if [ "$1" == "" ]; then fail "job name can't be empty, did you forgett the argument?"; fi
     local job_name="$1"
 
-    nomad run $JOBDIR/${job_name}.nomad > $(common::dev_null) 2>&1
-    common::fail_on_error "failed to run $job_name."
+    for region in ${!config_regions[@]}; do
+        info "running nomad job $job_name in region $region"
+        cat $JOBDIR/${job_name}.nomad | config::configure_job $region | nomad run -detach -region=$region -
+        common::fail_on_error "failed to run $job_name."
+    done 
+
     sleep 3
     info "$job_name job $(nomad job status $job_name | grep "^Status")"
     consul::put "$stateKey/$job_name" $STARTED
@@ -164,7 +168,7 @@ Documentation=https://nomadproject.io/docs/
 
 [Service]
 EnvironmentFile=-/etc/nomad/nomad.env
-ExecStart=$BINDIR/nomad agent -config /etc/nomad $2
+ExecStart=$BINDIR/nomad agent -encrypt $KON_NOMAD_ENCRYPTION_KEY -region $(config::get_region) -dc $(config::get_dc) -config /etc/nomad $2
 ExecReload=/bin/kill -HUP $MAINPID
 LimitNOFILE=65536
 

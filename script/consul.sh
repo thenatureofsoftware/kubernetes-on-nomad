@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 ###############################################################################
 # Installs Consul
@@ -94,6 +94,7 @@ consul::start-bootstrap () {
     consul:$CONSUL_VERSION agent -server \
     -dns-port=53 \
     -recursor=$kon_nameserver \
+    -datacenter="$(config::get_dc)" \
     -bootstrap-expect=1
 
     info "Switching nameserver to consul"
@@ -125,7 +126,7 @@ consul::start () {
         return 0;
     fi
 
-    info "Starting Consul $agent_type ..."
+    info "Starting Consul $agent_type in datacenter:$(config::get_dc) ..."
     consul::bind_interface
 
     docker run -d --name kon-consul \
@@ -138,14 +139,16 @@ consul::start () {
     consul:$CONSUL_VERSION $agent_type \
     -dns-port=53 \
     -recursor=$kon_nameserver \
-    -retry-join=$KON_BOOTSTRAP_SERVER
+    -retry-join=$KON_BOOTSTRAP_SERVER \
+    -datacenter="$(config::get_dc)" \
+    -encrypt="$KON_CONSUL_ENCRYPT_KEY"
 
     info "Switching nameserver to consul"
     consul::enable-consul-dns
 }
 
 consul::start_dev () {
-    info "Starting Consul in development mode ..."
+    info "Starting Consul in development mode and in datacenter:$(config::get_dc) ..."
     consul::bind_interface
 
     docker run -d --name kon-consul \
@@ -157,7 +160,9 @@ consul::start_dev () {
     -e "CONSUL_BIND_INTERFACE=$CONSUL_BIND_INTERFACE" \
     consul:$CONSUL_VERSION agent -dev \
     -dns-port=53 \
-    -recursor=$kon_nameserver
+    -recursor=$kon_nameserver \
+    -datacenter="$(config::get_dc)" \
+    -encrypt="$KON_CONSUL_ENCRYPT_KEY"
 
     info "Switching nameserver to consul"
     consul::enable-consul-dns   
@@ -181,18 +186,34 @@ consul::wait_for_started () {
 
 consul::put () {
     if [ "$1" == "" ] || [ "$2" == "" ]; then fail "invalid argument, key or value can't be empty"; fi
-    info "$(consul kv put $1 $2) value: $2"
+    
+    local key=$1
+    local value=""
+    
+    if [ "$2" == "-" ]; then
+        value=""
+    else
+        value=$2
+    fi
+    
+    info "$(consul kv put $key $value) value: $value"
 }
 
 consul::get () {
     if [ "$1" == "" ]; then fail "invalid first argument, can't be empty"; fi
-    local _value=$(consul kv get $1)
-    if [ "$?" -eq 0 ]; then echo "$_value"; fi
+    consul kv get $1 > $(common::dev_null) 2>&1
+    if [ $? -eq 0 ]; then echo "$(consul kv get $1)"; fi
+}
+
+consul::delete_all () {
+    if [ "$1" == "" ]; then fail "invalid first argument, can't be empty"; fi
+    consul kv delete -recurse $1 > $(common::dev_null) 2>&1
+    common::fail_on_error "delete of key:$1 failed"
 }
 
 consul::delete () {
     if [ "$1" == "" ]; then fail "invalid first argument, can't be empty"; fi
-    consul kv delete -recurse $1
+    consul kv delete $1 > $(common::dev_null) 2>&1
     common::fail_on_error "delete of key:$1 failed"
 }
 
@@ -204,5 +225,16 @@ consul::fail_if_missing_key () {
 
 consul::put_file () {
     info "$(consul kv put $1 @$2) value: $2"
+}
+
+consul::generate_encryption_key () {
+    if [ ! "$(common::which consul)" == "" ]; then
+        consul_encryption_key=$(consul keygen)
+        if [ $? -gt 0 ]; then fail "consul failed to generate encryption key"; fi
+    else
+        consul_encryption_key=$(docker run --rm -it consul keygen)
+        if [ $? -gt 0 ]; then fail "failed to generate encryption key using consul Docker image"; fi
+    fi
+    echo "$consul_encryption_key"
 }
 

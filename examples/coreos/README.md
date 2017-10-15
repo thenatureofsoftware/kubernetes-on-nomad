@@ -1,264 +1,202 @@
 # Setting up Kubernetes On Nomad using CoreOS (Vagrant)
 
-This example will show you how to setup Kubernetes On Nomad on four CoreOS Vagrant servers.
+This example shows how to setup **Kubernetes-On-Nomad** on four CoreOS Vagrant servers.
 You need Vagrant installed and it's only been tested on VirtulaBox.
 
-## TL;DR
+The example uses the new `cluster` command.
 
-I do recommend to follow the steps below, but if you're impatient you can bring up the cluster by running the following:
+You need `bash >= 4` to run `kon`. If you're on OSX you can install a newer version of `bash` using [Homebrew](https://brew.sh/) and `brew install bash`.
+
+First you need to clone the project:
 ```
 $ git clone https://github.com/TheNatureOfSoftware/kubernetes-on-nomad.git
 $ cd kubernetes-on-arm/examples/coreos
-$ ./setup.sh
 ```
 
-Once the cluster is up and running you need to add Kubernetes networking:
+Kubernetes-On-Nomad (`kon`) uses a configuration file `kon.conf` for setting up a cluster.
+You can generate a sample configuration file by running:
 ```
-$ vagrant ssh core-01
-core@core-01 ~ $ sudo -u root -i
-core-01 ~ # kon setup kubectl
-core-01 ~ #
-core-01 ~ # # Installs Weave Net
-core-01 ~ # kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d n)"
-core-01 ~ # # Adds DNS
-core-01 ~ # kon addon dns
-````
-
-## Step 1 - Boot up all machines and login to the first
-
-This step will create our four CoreOS servers that we will be using to install KON.
-
-Boot up all machines using Vagrant:
-```
-$ git clone https://github.com/TheNatureOfSoftware/kubernetes-on-nomad.git
-$ cd kubernetes-on-nomad/examples/coreos
-$ vagrant up
-$ vagrant ssh core-01
-core@core-01 ~ $ sudo -u root -i
-core-01 ~ #
+$ kon generate init
 ```
 
-## Step 2 - Install kon and generate a configuration
+For this example there's already a [kon.conf](./kon.conf) configuration file.
 
-This step will show you how to install `kon`-tool and use it to generate a sample configuration.
+The configuration tells `kon` which nodes should be used as Nomad and Consul servers:
 ```
-core-01 ~ # mkdir -p /opt/bin \
-&& curl -s -o /opt/bin/kon https://raw.githubusercontent.com/TheNatureOfSoftware/kubernetes-on-nomad/master/kon \
-&& chmod a+x /opt/bin/kon
+# This a comma separated list of servers <region>:<datacenter>:<hostname>:<IP address>
+KON_SERVERS=swe:east:core-01:172.17.8.101
 ```
-
-The first time you invoke `kon` it will pull down a docker image and install all `kon`-scripts to `/etc/kon`.
-
+and witch servers should be used as `etcd` servers:
 ```
-core-01 ~ # kon generate config
-Unable to find image 'thenatureofsoftware/kon:0.2-alpha' locally
-0.2-alpha: Pulling from thenatureofsoftware/kon
-cc5efb633992: Pull complete 
-4691a4109b46: Pull complete 
-1ffbf2eb47bb: Pull complete 
-14c0cddf0029: Pull complete 
-c3c0d82b49b2: Pull complete 
-f142b17bda3c: Pull complete 
-Digest: sha256:5f7f0471081474e5e5ea4eb9190469ca34f538c5b435460ef906f404247262c7
-Status: Downloaded newer image for thenatureofsoftware/kon:0.2-alpha
-Installing kubernetes-on-nomad to directory: /etc/kon
-Script installed successfully!
-
-              .-'''-.                
-             '   _    \              
-     .     /   /` '.   \    _..._    
-   .'|    .   |     \  '  .'     '.  
- .'  |    |   '      |  '.   .-.   . 
-<    |    \    \     / / |  '   '  | 
- |   | ____`.   ` ..' /  |  |   |  | 
- |   | \ .'   '-...-'`   |  |   |  | 
- |   |/  .               |  |   |  | 
- |    /\  \              |  |   |  | 
- |   |  \  \             |  |   |  | 
- '    \  \  \            |  |   |  | 
-'------'  '---'          '--'   '--' 
-v0.2-alpha
-
-Nomad not installed, Consul not installed, kubelet not installed, kubeadm not installed
-
-[2017/10/10:12:04:04 Info] Generating sample configuration file /etc/kon/kon.conf
-[2017/10/10:12:04:05 Info] You can now configure Kubernetes-On-Nomad by editing /etc/kon/kon.conf
-```
-
-You can view the sample config file `/etc/kon/kon.conf` to get a grasp of how to configure `kon`.
-But for this example we have a config already prepared.
-
-The next step is to copy the prepared config:
-```
-core-01 ~ # cp /example/kon.conf /etc/kon/
-```
-
-## Step 3 - Start bootstrap Consul
-
-Next step is to install and start the bootstrap Consul instance.
-Consul is run as a docker container.
-
-First we need to install consul binaries. We do need the `consul`-binary for running commands
-against the `consul agent` even if we run Consul as a docker container.
-```
-core@core-01 ~ $ kon consul install 
-````
-
-Then start the Consul bootstrap server:
-```
-core@core-01 ~ $ kon --interface eth1 consul start bootstrap
-```
-
-This will start the first instance of Consul and load `/etc/kon/kon.conf` in to the key-value store
-to be shared by all other nodes. The command also enables all DNS queries to go through Consul.
-You can test this by looking up the `consul`-service:
-```
-core-01 ~ # dig +short consul.service.dc1.consul
-172.17.8.101
-```
-
-You can also verify that consul is running in docker:
-```
-core-01 ~ # docker ps -q -f 'name=kon-consul' --format "\n\n{{.Names}} Status:{{.Status}} Created:{{.CreatedAt}}\n\n"
-
-kon-consul Status:Up 3 minutes Created:2017-10-10 12:13:24 +0000 UTC
-```
-
-## Step 4 - Start Nomad
-
-Next step is to install and run Nomad:
-```
-core-01 ~ # kon nomad install
-core-01 ~ # kon nomad start
-```
-We can verify that Nomad is running by verifying that the service is running:
-```
-core-01 ~ # systemctl status nomad
-● nomad.service - Nomad
-   Loaded: loaded (/etc/systemd/system/nomad.service; enabled; vendor preset: disabled)
-   Active: active (running) since Tue 2017-10-10 12:19:01 UTC; 59s ago
-     Docs: https://nomadproject.io/docs/
- Main PID: 1979 (nomad)
-    Tasks: 10 (limit: 32768)
-   Memory: 14.1M
-      CPU: 354ms
-   CGroup: /system.slice/nomad.service
-           └─1979 /opt/bin/nomad agent -config /etc/nomad
- ```
-
-You can also check that Nomad is running as a **server**:
-```
-core-01 ~ # nomad server-members
-Name            Address       Port  Status  Leader  Protocol  Build        Datacenter  Region
-core-01.global  172.17.8.101  4648  alive   true    2         0.7.0-beta1  dc1         global
-```
-
-A final step on our bootstrap server in to install Kubernetes binaries:
-```
-core-01 ~ # kon kubernetes install
-```
-
-## Step 5 - Start Nomad and Consul on all other nodes
-
-Now it's time to switch to the rest of the nodes and join them all together to one Nomad cluster.
-The difference here is how we start Consul by pointing at the bootstrap server:
-```
-core@core-02 ~ $ sudo kon --bootstrap 172.17.8.101 --interface eth1 consul start
-```
-
-Run the following commands on all other nodes:
-```
-core@core-02 ~ $ sudo mkdir -p /opt/bin \
-&& sudo curl -s -o /opt/bin/kon https://raw.githubusercontent.com/TheNatureOfSoftware/kubernetes-on-nomad/master/kon \
-&& sudo chmod a+x /opt/bin/kon \
-&& sudo kon consul install \
-&& sudo kon --bootstrap 172.17.8.101 --interface eth1 consul start \
-&& sudo kon nomad install \
-&& sudo kon nomad start \
-&& sudo kon kubernetes install
-```
-
-You can verify that everything is working by checking the status of all Nomad nodes:
-```
-core@core-04 ~ $ nomad node-status -verbose
-ID                                    DC   Name     Class         Version      Drain  Status
-be7a4d44-0a09-877f-8b6e-ae5c1fc674be  dc1  core-04  kubelet       0.7.0-beta1  false  ready
-197bc8ad-47a4-6c22-38a7-bddb5d1b96cd  dc1  core-03  kubelet       0.7.0-beta1  false  ready
-f4ed5fda-1471-0bf4-5966-dd998bd0c56a  dc1  core-02  etcd,kubelet  0.7.0-beta1  false  ready
-```
-
-
-## Step 6 - Start etcd
-
-Up until now we've only been starting our infrastructure for running Kubernetes. Now it's time
-to start bringing Kubernetes up. You can pick any node in the cluster.
-
-We first need to generate all Kubernetes konfiguration:
-```
-core@core-04 ~ $ sudo -u root -i
-core-04 ~ # kon generate all
-```
-
-If you take a look at the configuration (you can use any node):
-```
-core-04 ~ # consul kv get kon/config | grep ETCD_INITIAL_CLUSTER
-ETCD_INITIAL_CLUSTER=core-02=http://172.17.8.102:2380
+ETCD_SERVERS=http://172.17.8.101:2379
+ETCD_INITIAL_CLUSTER=core-01=http://172.17.8.101:2380
 ETCD_INITIAL_CLUSTER_TOKEN=etcd-initial-token-dc1
 ```
-then you'll see that we have one etcd node. If you check the nomad config:
-```
-core@core-04 ~ $ cat /etc/nomad/client.hcl | grep node_class node_class = "etcd,kubelet"
-```
-Then you'll se that this node have the `node_class` set to `etcd`.
-(You can configure as many `etcd` servers as you want.)
 
-Now it's time to start `etcd`:
+The configuration also lists all nodes that will be used as Kubernetes nodes.
+Kubernetes nodes are called **minions**, to separate them from Nomad nodes.
+In this example there's three `minions`. The format is the same as for `KON_SERVERS`.
 ```
-core-04 ~ # kon etcd start
-core-04 ~ # # Check that the job is running
-core-04 ~ # nomad job status etcd | grep "^Status"
-Status        = running
+KON_MINIONS=swe:east:core-02:172.17.8.102,swe:east:core-03:172.17.8.103,swe:east:core-04:172.17.8.104
 ```
 
-## Step 7 - Start Kubernetes
+First we need to boot up all our servers. This step and the configuration `KON_VAGRANT_SSH=true` in `kon.conf` is the only Vagrant specific about this example.
 
-Now finally let's start Kubernetes. This includes starting the control plane and all `kubelet`s and `kube-proxy`:
+Run:
 ```
-core-04 ~ # kon start control-plane \
-&& kon start kubelet \
-&& kon start kube-proxy
+$ vagrant up
 ```
 
-To check that all is working let's setup kubectl:
-```
-core-04 ~ # kon setup kubectl
-core-04 ~ # kubectl cluster-info
-Kubernetes master is running at https://kubernetes.service.dc1.consul:6443
+When all servers are up and running it's time to start our Nomad cluster.
 
-To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
+Make sure your in the right spot and use `kon` to start the cluster:
 ```
-
-You need to add Kubernetes Networking (Weave):
-```
-core-04 ~ # kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
-serviceaccount "weave-net" created
-clusterrole "weave-net" created
-clusterrolebinding "weave-net" created
-daemonset "weave-net" created
+$ pwd
+.../kubernetes-on-nomad/examples/coreos
+$ bash ../../kon.sh --config ./kon.conf cluster start 
 ```
 
-And finally add the Kubernetes DNS addon and check all your nodes:
+When the `cluster start`-command is done, login on any node and check the state.
+
+First login:
 ```
-core-04 ~ # kon addon dns
-core-04 ~ # kubectl get nodes
-NAME      STATUS    ROLES     AGE       VERSION
-core-02   Ready     <none>    6m        v1.8.0
-core-03   Ready     <none>    6m        v1.8.0
-core-04   Ready     <none>    6m        v1.8.0
+$ vagrant ssh core-03
+core@core-03 ~ $ # Switch to root
+core@core-03 ~ $ sudo -u root -i
+```
+and check the cluster state using the `view state`-command:
+```
+core-03 ~ # kon --quiet view state
+Components                              State
+-----------------------                 ----------
+certificates                            
+config                                  OK
+consul                                  Running
+etcd                                    
+kube-apiserver                          
+kube-controller-manager                 
+kube-proxy                              
+kube-scheduler                          
+kubeconfig                              
+kubelet                                 
+nomad                                   Running
+```
+As you can see Consul and Nomad are running and `kon.conf` has been stored in Consul. All `DNS` queries on the host are delegated to Consul. You can test this by issuing the following:
+```
+core-03 ~ # dig +short google.com
+172.217.18.142
+core-03 ~ # dig +short nomad.service.east.consul
+172.17.8.101
+``` 
+
+We now have a Nomad cluster with Consul. Now it's time to setup Kubernetes.
+
+Let's start with generating all certificates and configuration using the `generate all`-command, then view the state again:
+```
+core-03 ~ # kon --quiet generate all && kon --quiet view state
+Components                              State
+-----------------------                 ----------
+certificates                            OK
+config                                  OK
+consul                                  Running
+etcd                                    Configured
+kube-apiserver                          
+kube-controller-manager                 
+kube-proxy                              OK
+kube-scheduler                          
+kubeconfig                              OK
+kubelet                                 
+nomad                                   Running
+```
+We can see that `certificates` and `kubeconfig` are `OK` and `etcd` is `Configured`.
+
+
+Now start `etcd` using the `etcd start`-command and watch it enter the running state:
+```
+core-03 ~ # kon --quiet etcd start && watch kon --quiet view state  
+```
+```
+Every 2.0s: kon --quiet view state                                                                                                                        Mon Oct 16 06:54:39 2017
+
+Components                              State
+-----------------------                 ----------
+certificates                            OK
+config                                  OK
+consul                                  Running
+etcd                                    Running
+kube-apiserver
+kube-controller-manager
+kube-proxy                              OK
+kube-scheduler
+kubeconfig                              OK
+kubelet
+nomad                                   Running
+```
+You can verify that you have a `etcd` cluster up and running in Nomad by querying Consul:
+```
+core-03 ~ # dig +short etcd.service.east.consul
+172.17.8.102
+172.17.8.103
 ```
 
+Now let's start Kubernetes using the `kubernetes start`-command and the `setup kubectl`-command:
+```
+core-03 ~ # kon --quiet kubernetes start && kon --quiet setup kubectl && watch kon --quiet view state
+```
+```
+Every 2.0s: kon --quiet view state                                                                                                                        Mon Oct 16 07:01:34 2017
 
- 
+Components                              State
+-----------------------                 ----------
+certificates                            OK
+config                                  OK
+consul                                  Running
+etcd                                    Running
+kube-apiserver                          Running
+kube-controller-manager                 Running
+kube-proxy                              Running
+kube-scheduler                          Running
+kubeconfig                              OK
+kubelet                                 Running
+kubernetes                              Running
+kubernetes/minion/core-02               NotReady
+kubernetes/minion/core-03               NotReady
+kubernetes/minion/core-04               NotReady
+nomad                                   Running
+```
+As you can see Kubernetes and all `minions` are up and running. The `minion`:s state is `NotReady` and that's because we haven't installed any Kubernetes network.
 
+You can use any CNI-network plugin but make sure to configure the right `POD_CLUSTER_CIDR` in `kon.conf`.
 
+In this setup we're going to use [`weave`](https://weave.works).
+
+Use `kubectl` to install [`weave`](https://weave.works) and at the same time install the Kubernetes DNS addon using the `addon dns`-command and finally view the state:
+```
+core-03 ~ # kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')" && kon --quiet addon dns && watch kon --quiet view state
+```
+```
+Every 2.0s: kon --quiet view state                                                                                                                        Mon Oct 16 07:13:25 2017
+
+Components                              State
+-----------------------                 ----------
+certificates                            OK
+config                                  OK
+consul                                  Running
+etcd                                    Running
+kube-apiserver                          Running
+kube-controller-manager                 Running
+kube-proxy                              Running
+kube-scheduler                          Running
+kubeconfig                              OK
+kubelet                                 Running
+kubernetes                              Running
+kubernetes/minion/core-02               Ready
+kubernetes/minion/core-03               Ready
+kubernetes/minion/core-04               Ready
+nomad                                   Running
+```
+
+You now have a Kubernetes cluster, up and running on Nomad, to play around with.
+I encourage you to try out what happens if you kill the `apiserver`, or any other
+component, in the Kubernetes control plane.
 
