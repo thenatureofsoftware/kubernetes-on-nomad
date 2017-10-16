@@ -10,7 +10,7 @@ BINDIR=${BINDIR:=/opt/bin}
 JOBDIR=$BASEDIR/nomad/job
 
 KON_CONFIG=$KON_INSTALL_DIR/kon.conf
-KON_LOG_FILE=/var/log/kon.log
+KON_LOG_FILE=${KON_LOG_FILE:=/var/log/kon.log}
 K8S_CONFIGDIR=${K8S_CONFIGDIR:=/etc/kubernetes}
 K8S_PKIDIR=${K8S_PKIDIR:=$K8S_CONFIGDIR/pki}
 
@@ -27,7 +27,7 @@ BUCKET="resources"
 ETCD_SERVERS=${ETCD_SERVERS:=""}
 
 konKey="kon"
-konConfig="$konKey/config"
+konConfigKey="$konKey/config"
 
 # If state is a nomad job, then the last part should always be
 # the name of the job.
@@ -45,6 +45,7 @@ controllerMgrStateKey="$stateKey/kube-controller-manager"
 kubernetesStateKey="$stateKey/kubernetes"
 
 kubernetesKey="kubernetes"
+minionKey="$kubernetesKey/minion"
 controllerMgrKubeconfigKey="$kubernetesKey/controller-manager/kubeconfig"
 schedulerKubeconfigKey="$kubernetesKey/scheduler/kubeconfig"
 adminKubeconfigKey="$kubernetesKey/admin/kubeconfig"
@@ -59,11 +60,23 @@ etcdServersKey="$etcdKey/servers"
 etcdInitialClusterKey="$etcdKey/initial-cluster"
 etcdInitialClusterTokenKey="$etcdKey/initial-cluster-token"
 
-STOPPED="stopped"
-STARTED="started"
-RUNNIG="running"
-CONFIGURED="configured"
+STOPPED="Stopped"
+STARTED="Started"
+RUNNING="Running"
+CONFIGURED="Configured"
 OK="OK"
+
+###############################################################################
+# Source                                                                      #
+###############################################################################
+source $SCRIPTDIR/arguments.sh
+source $SCRIPTDIR/common.sh
+source $SCRIPTDIR/config.sh
+source $SCRIPTDIR/consul.sh
+source $SCRIPTDIR/nomad.sh
+source $SCRIPTDIR/kubernetes.sh
+source $SCRIPTDIR/ssh.sh
+source $SCRIPTDIR/cluster.sh
 
 ###############################################################################
 # Installs kon scripts                                                        #
@@ -83,43 +96,10 @@ kon::install_script () {
     cp $JOBDIR/*.nomad $TARGET/nomad/job
 
     cp $BASEDIR/kon.sh $TARGET/
+    cp $BASEDIR/version $TARGET/
 
     chmod a+x $TARGET/script/*.sh
     chmod a+x $TARGET/kon.sh
-}
-
-###############################################################################
-# Loads configuration file                                                    #
-###############################################################################
-kon::config () {
-    mkdir -p $KON_INSTALL_DIR
-    avtive_config=""
-    
-    if [ ! "$_arg_config" == "" ] && [ -f "$_arg_config" ]; then
-        active_config=$_arg_config
-    elif [ -f "$KON_CONFIG" ]; then
-        active_config=$KON_CONFIG
-    else
-        consul::get $konConfig > $KON_CONFIG 2>&1
-        if [ $? -eq 0 ]; then
-            active_config=$KON_CONFIG
-        else
-            rm -f $KON_CONFIG
-        fi
-    fi
-
-    if [ ! "$active_config" == "" ]; then
-        info "loading configuration from $active_config"
-        source $active_config
-        if [ "$KON_SAMPLE_CONFIG" == "true" ]; then
-            fail "can't use a sample configuration, please edit /etc/kon/kon.conf first"
-        fi
-
-        if [ -f "$KON_CONFIG" ]; then
-            consul::put_file $konConfig $KON_CONFIG > "$(common::dev_null)" 2>&1
-            if [ $? -eq 0 ]; then consul::put $configStateKey $OK; fi
-        fi
-    fi
 }
 
 ###############################################################################
@@ -160,13 +140,11 @@ kon::generate_certificates () {
 # Generates kubeconfig files.
 ###############################################################################
 kon::generate_kubeconfigs () {
-
-    rm $K8S_CONFIGDIR/*.conf /dev/null 2>&1
-    IFS=',' read -ra MINIONS <<< "$KUBE_MINIONS"    
-    for minion in ${MINIONS[@]}; do
-        NAME=$(printf $minion|awk -F'=' '{print $1}')
-        IP=$(printf $minion|awk -F'=' '{print $2}')
-        kon::generate_kubeconfig "$NAME" "$IP"
+        
+    for minion in ${!config_minions[@]}; do
+        minion_name=${config_minions[$minion]}
+        minion_ip=$minion
+        kon::generate_kubeconfig "$minion_name" "$minion_ip"
     done
 
     # kubeconfig for controller-manager
@@ -246,8 +224,7 @@ kon::get_cert_and_key() {
 ###############################################################################
 kon::reset_etcd () {
     nomad::stop_job "etcd"
-    info "$(consul kv delete -recurse $etcdKey)"
-    info "$(consul kv delete $etcdStateKey)"
+    consul::delete_all $etcdKey
 }
 
 ###############################################################################
@@ -306,22 +283,19 @@ kon::load_kube_proxy_config () {
 ###############################################################################
 
 ###############################################################################
-# Sets up the bootstrap node.
-###############################################################################
-setup-node-bootstrap () {
-    consul::install
-    consul-start-bootstrap
-    nomad::install
-    nomad::start
-    kubernetes::install
-}
-
-###############################################################################
-# Sets up an ordinary node.
+# Sets up a node.
 ###############################################################################
 setup-node () {
     consul::install
-    consul-start
+    if [ "$(common::is_bootstrap_server)" == "true" ] && [ ! "$KON_DEV" == "true" ]; then
+        info "starting bootstrap consul..."
+        consul-start-bootstrap
+        info "bootstrap consul started"
+    else
+        info "starting consul..."
+        consul-start
+        info "consul started"
+    fi
     nomad::install
     nomad::start
     kubernetes::install
@@ -334,7 +308,7 @@ generate-config () {
     if [ -f "$KON_CONFIG" ]; then
         fail "$KON_CONFIG already exists"
     fi
-    common::generate_config_template
+    config::generate_config_template
     info "you can now configure Kubernetes-On-Nomad by editing $KON_CONFIG"
 }
 
@@ -501,9 +475,11 @@ kubernetes-install () {
 
 kubernetes-reset () {
     kubernetes-stop
-    consul::delete $kubernetesKey
+    consul::delete_all $kubernetesKey
     consul::put $certificateStateKey "-"
     consul::put $kubeconfigStateKey "-"
+    rm -rf $K8S_PKIDIR/*
+    rm -rf $K8S_CONFIGDIR/*.*
 }
 
 kubernetes-start () {
@@ -645,56 +621,69 @@ consul-dns-disable () {
    consul::disable-consul-dns
 }
 
+cluster-start () {
+    info "Experimental command that starts the whole cluster"
+    cluster::start
+}
+
+###############################################################################
+# Shows the state of the cluster
+###############################################################################
 view-state () {
     # Default view
     declare -A konStates
     konStates=(
-                ["etcd"]="-" \
-                ["consul"]="-" \
-                ["config"]="-" \
-                ["nomad"]="-" \
-                ["certificates"]="-" \
-                ["kubeconfig"]="-" \
-                ["kubelet"]="-" \
-                ["kube-proxy"]="-" \
-                ["kube-apiserver"]="-" \
-                ["kube-scheduler"]="-" \
-                ["kube-controller-manager"]="-")
+                [etcd]="" \
+                [consul]="" \
+                [config]="" \
+                [nomad]="" \
+                [certificates]="" \
+                [kubeconfig]="" \
+                [kubelet]="" \
+                [kube-proxy]="" \
+                [kube-apiserver]="" \
+                [kube-scheduler]="" \
+                [kube-controller-manager]="")
+    
+    # Check if Consul is running
+    if consul catalog datacenters > $(common::dev_null) 2>&1; then
+        konStates[consul]=$RUNNING
 
-    if [ ! "$(dig +short "consul.service.dc1.consul")" == "" ]; then konStates["consul"]="running"; fi
-    if [ ! "$(dig +short "nomad.service.dc1.consul")" == "" ]; then konStates["nomad"]="running"; fi
-
-    # Fetch values for view
-    if [ "${konStates["consul"]}" == "running" ]; then
-        stateItems="$(consul kv get -recurse $stateKey)"
-        for stateItem in $stateItems
-        do
-            key="$(echo $stateItem | awk -F '[/:]' '{print $3}')"
-            value="$(echo $stateItem | awk -F '[:/]' '{print $4}')"
-            konStates["$key"]="$value"
+        # Fetch all states
+        for stateItem in $(consul kv get -recurse $stateKey); do
+            local item=${stateItem//$'\n'}
+            konStates[$(echo $item | awk -F '[/:]' '{print $3}')]="$(echo $item | awk -F '[/:]' '{print $4}')"
         done
-    fi
 
-    if [ ! "$(dig +short "etcd.service.dc1.consul")" == "" ]; then konStates["etcd"]="running"; fi
-    if [ ! "$(dig +short "kubernetes.service.dc1.consul")" == "" ]; then
-        konStates["kube-apiserver"]="running"
-        konStates["kubernetes"]="running"
-        minions=$(kubectl get nodes -o json)
-        for minion in $(echo $minions|jq '.items[].status.addresses[]|select(.type == "Hostname").address'|sed 's/"//g'); do
-            is_ready=$(echo $minions |jq 'select(.items[].status.addresses[].address == "core-01")|.items[].status.conditions[]|select(.type == "Ready")|.status' \
-            | sed 's/"//g'|awk '{print tolower($0)}')
-            if [ "$is_ready" == "true" ]; then
-                value="ready";
-            else
-                value="not-ready"
+        # For each datacenter, check if it has any components running.
+        for dc in "$(consul catalog datacenters)"; do
+
+            if [ "$(dig +short "etcd.service.$dc.consul")" ]; then konStates[etcd]=$RUNNING; fi
+            if [ "$(dig +short "controller-manager.service.$dc.consul")" ]; then konStates[kube-controller-manager]=$RUNNING; fi
+            if [ "$(dig +short "scheduler.service.$dc.consul")" ]; then konStates[kube-scheduler]=$RUNNING; fi
+            if [ "$(dig +short "kubernetes.service.$dc.consul")" ]; then
+        
+                # Kubernetes is running, now fetch the state of all minions.
+                konStates[kubernetes]=$RUNNING
+                konStates[kube-apiserver]=$RUNNING
+                minions=$(kubectl get nodes -o json)
+                for minion in $(echo $minions|jq '.items[].status.addresses[]|select(.type == "Hostname").address'|sed 's/"//g'); do
+                    konStates[$minionKey/$minion]="$(kubectl get nodes -l "kubernetes.io/hostname=$minion" | sed '2q;d' | awk '{print $2}')"
+                done
             fi
-            konStates["kubernetes/node/$minion"]="$value"
         done
     fi
-    if [ ! "$(dig +short "controller-manager.service.dc1.consul")" == "" ]; then konStates["kube-controller-manager"]="running"; fi
-    if [ ! "$(dig +short "scheduler.service.dc1.consul")" == "" ]; then konStates["kube-scheduler"]="running"; fi
-    if [ "$(nomad job status -short kubelet|grep "^Status"|sed 's/ //g'|awk -F '=' '{print $2}')" == "running" ]; then konStates["kubelet"]="running"; fi
-    if [ "$(nomad job status -short kube-proxy|grep "^Status"|sed 's/ //g'|awk -F '=' '{print $2}')" == "running" ]; then konStates["kube-proxy"]="running"; fi 
+
+    # If Nomad is running, check job status for kubelet and proxy
+    if nomad server-members > $(common::dev_null) 2>&1; then
+        konStates[nomad]=$RUNNING
+        
+        if nomad job status -short kubelet > $(common::dev_null) 2>&1 \
+        && [ "$(nomad job status -short kubelet|grep "^Status"|sed 's/ //g'|awk -F '=' '{print $2}')" == "running" ]; then konStates[kubelet]=$RUNNING; fi
+        
+        if nomad job status -short kube-proxy > $(common::dev_null) 2>&1 \
+        && [ "$(nomad job status -short kube-proxy|grep "^Status"|sed 's/ //g'|awk -F '=' '{print $2}')" == "running" ]; then konStates[kube-proxy]=$RUNNING; fi 
+    fi
     
     # Sort view
     IFS=$'\n'
@@ -726,18 +715,8 @@ view-state () {
     done
 }
 
-###############################################################################
-# Source                                                                      #
-###############################################################################
-source $SCRIPTDIR/arguments.sh
-source $SCRIPTDIR/common.sh
-source $SCRIPTDIR/kon_common.sh
-source $SCRIPTDIR/consul.sh
-source $SCRIPTDIR/nomad.sh
-source $SCRIPTDIR/kubernetes.sh
-
 # Move to stage 1 init funcion
-common::check_root
+#common::check_root
 common::mk_bindir
 
 if [ "$1" == "install_script" ]; then
@@ -774,13 +753,21 @@ if [ "$_arg_quiet" == "off" ]; then
     if [ "$(common::which kubelet)" ]; then kubernetes_version="$(kubelet --version)"; fi
     if [ "$(common::which kubeadm)" ]; then kubeadm_version="kubeadm $(kubeadm version|awk -F':' '{ print $5 }'|awk -F',' '{print $1}'|sed 's/\"//g')"; fi
     cat $SCRIPTDIR/banner.txt
+    echo "$(cat $BASEDIR/version)"
     printf "$nomad_version, $consul_version, $kubernetes_version, $kubeadm_version\n\n"
 fi
 
 ###############################################################################
-# Load configuration                                                          #
+# Check log file permissions
 ###############################################################################
-kon::config
+touch $KON_LOG_FILE > $(common::dev_null) 2>&1 || KON_LOG_FILE="/tmp/kon.log"
+touch $KON_LOG_FILE > $(common::dev_null) 2>&1 || KON_LOG_FILE="$(pwd)/kon.log"
+touch $KON_LOG_FILE > $(common::dev_null) 2>&1 || KON_LOG_FILE=$(common::dev_null)
+
+###############################################################################
+# Load configuration
+###############################################################################
+config::configure
 
 ###############################################################################
 # Execute command                                                             #

@@ -6,7 +6,7 @@ require 'fileutils'
 Vagrant.require_version ">= 1.6.0"
 
 # Make sure the vagrant-ignition plugin is installed
-required_plugins = %w(vagrant-ignition)
+required_plugins = %w(vagrant-ignition vagrant-scp)
 
 plugins_to_install = required_plugins.select { |plugin| not Vagrant.has_plugin? plugin }
 if not plugins_to_install.empty?

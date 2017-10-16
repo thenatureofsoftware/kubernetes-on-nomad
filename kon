@@ -1,11 +1,11 @@
 #!/bin/bash
 
 ###############################################################################
-# Wrapper script - installs kon script from docker image.                     #
+# Wrapper script - installs kon script from docker image.
 ###############################################################################
+mkdir -p /opt/bin
 if [ ! -d /etc/kon ] || [ ! -f /etc/kon/kon.sh ]; then
     mkdir -p /etc/kon
-    mkdir -p /opt/bin
-    docker run --rm -v /etc/kon:/etc/kon thenatureofsoftware/kon:0.2-alpha
+    docker run --rm -v /etc/kon:/etc/kon thenatureofsoftware/kon:v0.3-alpha
 fi
 source /etc/kon/kon.sh

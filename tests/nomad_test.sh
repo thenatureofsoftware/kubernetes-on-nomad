@@ -8,7 +8,7 @@ test::nomad::client_config () {
     source $SCRIPTDIR/nomad.sh
 
     ETCD_INITIAL_CLUSTER=node1=http://192.168.0.101:2380,node2=http://192.168.0.102:2380
-    KUBE_MINIONS=node1=http://192.168.0.101:2380,http://192.168.0.103:2380
+    KON_MINIONS=node1=http://192.168.0.101:2380,http://192.168.0.103:2380
     
     nomad_advertise_ip=192.168.0.101
     nomad::client_config /dev/null

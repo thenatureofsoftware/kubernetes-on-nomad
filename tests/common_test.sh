@@ -79,8 +79,20 @@ test::common::error_on_error () {
     assert "common::error_on_error_logged_cmd" "$actual" "$(error "A command returned non-zero exit: 1")"
 }
 
+test::common::is_bootstrap_server () {
+    source $SCRIPTDIR/common.sh
+    ip_addr=$(common::ip_addr)
+
+    KON_BOOTSTRAP_SERVER="$ip_addr"
+    assert "common::common::is_bootstrap_server_true" "$(common::is_bootstrap_server)" "true"
+
+    KON_BOOTSTRAP_SERVER="0.0.0.0"
+    assert "common::common::is_bootstrap_server_false" "$(common::is_bootstrap_server)" "false"
+}
+
 (test::common::check_cmd)
 (test::common::logfile)
 (test::common::which)
 (test::common::fail_on_error)
 (test::common::error_on_error)
+(test::common::is_bootstrap_server)

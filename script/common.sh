@@ -26,7 +26,7 @@ error () {
 ###############################################################################
 # Logs a message and exit
 ###############################################################################
-fail() {
+fail () {
     error "$1"
     if [ ! "$_test_" ]; then exit 1; fi
 }
@@ -144,10 +144,6 @@ common::dev_null () {
     fi
 }
 
-common::install () {
-    sudo apt-get update && sudo apt-get install -y $1 && sudo apt-get clean
-}
-
 common::service_address () {
     echo $(curl -s ${1} | jq '.[0]| .ServiceAddress,.ServicePort'| sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g' | sed -e 's/"//g'|sed -e 's/ /:/g')
 }
@@ -165,6 +161,14 @@ common::is_server () {
         echo "false"
     else
         echo "true"
+    fi
+}
+
+common::is_bootstrap_server () {
+    if [ "$KON_BOOTSTRAP_SERVER" == "$(common::ip_addr)" ]; then
+        echo "true"
+    else
+        echo "false"
     fi
 }
 
@@ -213,92 +217,8 @@ common::os () {
 
 function common::join_by { local IFS="$1"; shift; echo "$*"; }
 
-common::generate_config_template () {
-  info "generating sample configuration file $KON_CONFIG"
-  mkdir -p $KON_INSTALL_DIR
-  cat <<EOF > $KON_CONFIG
-#!/bin/bash
+if (( ${BASH_VERSION%%.*} < 4 )); then
+    echo "BASH_VERSION=$BASH_VERSION, kon requires Bash version >= 4!"
+    exit 1
+fi
 
-###############################################################################
-# Kubernetes version
-###############################################################################
-K8S_VERSION=${K8S_VERSION:=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)}
-CNI_VERSION=${CNI_VERSION:=v0.6.0}
-
-###############################################################################
-# kubeadm version
-###############################################################################
-KUBEADM_VERSION=${KUBEADM_VERSION:=v1.9.0-alpha.1}
-
-###############################################################################
-# Consul Bootstrap server
-###############################################################################
-KON_BOOTSTRAP_SERVER=192.168.1.101
-KON_BIND_INTERFACE=enp0s8
-KON_SERVERS=172.17.4.101,172.17.4.102,172.17.4.103
-
-###############################################################################
-# List of comma separated addresses <scheme>://<ip>:<port>
-###############################################################################
-ETCD_SERVERS=http://etcd.service.dc1.consul:2379
-
-###############################################################################
-# List of etcd initial cluster <name>=<scheme>://<ip>:<port>
-###############################################################################
-ETCD_INITIAL_CLUSTER=default=http://127.0.0.1:2380
-
-###############################################################################
-# Etcd initial cluster token
-###############################################################################
-ETCD_INITIAL_CLUSTER_TOKEN=etcd-initial-token-dc1
-
-###############################################################################
-# List of minions (kubernetes nodes). Must be nomad nodes with node_class
-# containing kubelet. Exampel : node_class = "etcd,kubelet"
-###############################################################################
-KUBE_MINIONS=node1=192.168.0.1,node2=192.168.0.2,node3=192.168.0.3,\
-node4=192.168.0.3
-
-###############################################################################
-# kube-apiserver advertise address
-###############################################################################
-KUBE_APISERVER_PORT=6443
-KUBE_APISERVER_EXTRA_SANS=kubernetes.service.dc1.consul,kubernetes.service.dc1,kubernetes.service
-KUBE_APISERVER_ADDRESS=https://kubernetes.service.dc1.consul:6443
-
-# Weave
-#POD_CLUSTER_CIDR=10.32.0.0/16
-# Flannel
-POD_CLUSTER_CIDR=10.244.0.0/16
-
-###############################################################################
-# Remove this variable or set it to false when done configuring.
-###############################################################################
-KON_SAMPLE_CONFIG=true
-
-EOF
-}
-
-kon::kube-proxy-conf () {
-    cat <<EOF
-apiVersion: v1
-kind: Config
-clusters:
-- cluster:
-  certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-    server: https://10.0.2.15:6443
-    name: default
-    contexts:
-    - context:
-      cluster: default
-      namespace: default
-      user: default
-      name: default
-      current-context: default
-      users:
-      - name: default
-        user:
-        tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
-
-EOF
-}
