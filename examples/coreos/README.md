@@ -198,5 +198,6 @@ nomad                                   Running
 
 You now have a Kubernetes cluster, up and running on Nomad, to play around with.
 I encourage you to try out what happens if you kill the `apiserver`, or any other
-component, in the Kubernetes control plane.
+component, in the Kubernetes control plane. Or why not shutdown one of the servers (except `core-01`)?
+
 

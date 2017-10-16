@@ -4,50 +4,37 @@
 
 Kubernetes-On-Nomad `kon` is a tool for simplifying running [Kubernetes](https://kubernetes.io/) on [Nomad](https://www.nomadproject.io/) using [Consul](https://www.consul.io/) (Vault comming soon) for storing all Kubernetes configuration.
 
+It's not involved during runtime but helps you setup Nomad, Consul and Kubernetes together.
+
 ## Why
 
-* All etcd and kubernetes configuration and certificates stored in Consul (Vault comming soon)
+* All etcd and kubernetes configuration and certificates stored in Consul (Vault coming soon)
 * Simple handling of Kubernetes infrastructure and control plane
-* HA? There is no single master. Nomad handles the Kubernetes Control plane.
+* HA out of the box, there is no single master as long as you have enough nodes. Nomad handles the Kubernetes Control plane.
 * Easy to set up a Kubernetes cluster (uses kubeadm under the hood)
 
 ## How
 
+Generate a sample `kon.conf` file:
 ```
-$ # Generate a config file and edit it for your environment
 $ kon generate init
-$ # Run this on the bootstrap server
-$ kon consul install && kon consul start bootstrap
-$ kon nomad install && kon nomad start
-$ # Generates all certificates and kubeconfigs and stores it in Consul
-$ kon generate all
-```
-and
-```
-$ # Run this on all the other nodes
-$ kon kubernetes install
-$ kon consul install && kon --bootstrapserver <IP-address> consul start 
-$ kon nomad install && kon nomad start
 ```
 
-next on any node:
+Edit `kon.conf` and add all your machines. Then run `cluster start` on any machine that can do `ssh` password-less:
 ```
-$ # Start etcd
-$ kon etcd start
-$ # Start Kubernetes control plane
-$ kon start control-plane
-$ kon start kubelet
-$ kon start kube-proxy
+$ kon --config ./kon.conf cluster start
 ```
 
-setup `kubectl` and install Kubernetes networking
+Then login on any node and run:
 ```
-$ kon setup kubectl
-$ kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
+core-01 ~ # kon generate all
+core-01 ~ # kon etcd start
+core-01 ~ # kon kubernetes start
+core-01 ~ # kon setup kubectl
+core-01 ~ # kon addon dns
+core-01 ~ # kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
 ```
 
-
-
-see the [examples](./examples)
+see the [CoreOS example](./examples/coreos)
 
 
