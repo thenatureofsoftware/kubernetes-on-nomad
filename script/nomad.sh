@@ -1,9 +1,15 @@
 #!/bin/sh
 
 nomad::install () {
+
+    if [ $(common::which nomad) ]; then
+        info "Nomad already installed $(nomad version)"
+        return 0
+    fi
+
     wget --quiet https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_amd64.zip
     
-    if [ $? -gt 0 ]; then fail "Failed to download nomad ${NOMAD_VERSION}"; fi
+    if [ $? -gt 0 ]; then fail "failed to download nomad ${NOMAD_VERSION}"; fi
     
     tmpdir=$(mktemp -d kon.XXXXXX)
     unzip -d $tmpdir nomad_${NOMAD_VERSION}_linux_amd64.zip
@@ -38,15 +44,15 @@ nomad::deploy_service_unit () {
     nomad_advertise_ip=$(common::ip_addr)
 
     if [ "$KON_DEV" == "true" ]; then
-        info "Generating Nomad dev config"
+        info "generating Nomad dev config"
         nomad::service_template $nomad_service_unit_file "-dev"
         nomad::dev_template "/etc/nomad/dev.hcl" "$nomad_advertise_ip"
-    elif [ "$(common::is_server)" == "true" ]; then
-        info "Generating Nomad server config"
+    elif [ "$(config::is_server)" == "true" ]; then
+        info "generating Nomad server config"
         nomad::service_template $nomad_service_unit_file
         nomad::server_template "/etc/nomad/server.hcl" "$nomad_advertise_ip"
     else
-        info "Generating Nomad client config"
+        info "generating Nomad client config"
         nomad::service_template $nomad_service_unit_file
         nomad::client_config "/etc/nomad/client.hcl" "$nomad_advertise_ip"
     fi
@@ -85,7 +91,8 @@ nomad::servers_config () {
     nomad_servers=()
     IFS=', ' read -r -a strings <<< $arg_servers
     for elem in "${strings[@]}"; do
-        nomad_servers+=("\"$elem\"")
+        ip_addr=$(config::node_ip $elem)
+        nomad_servers+=("\"$ip_addr\"")
     done
     _test_="[$(common::join_by , "${nomad_servers[@]}")]"
     echo $_test_
@@ -109,7 +116,7 @@ nomad::client_config () {
             nomad_advertise_ip=$1
         fi
     fi
-    info "Configuring Nomad client for IP $nomad_advertise_ip"
+    info "configuring Nomad client for IP $nomad_advertise_ip"
 
     # Check if this is an etcd node
     if [ -n "$(echo $ETCD_INITIAL_CLUSTER | grep $nomad_advertise_ip)" ]; then

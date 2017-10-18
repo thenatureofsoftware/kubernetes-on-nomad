@@ -9,3 +9,4 @@ setup.env
 **/.vagrant
 **/*.log
 **/*.out
+**/.pki

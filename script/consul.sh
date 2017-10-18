@@ -6,7 +6,7 @@
 consul::install () {
     # Download Consul
     wget --quiet https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip
-    if [ $? -gt 0 ]; then fail "Failed to download Consul ${CONSUL_VERSION}"; fi
+    if [ $? -gt 0 ]; then fail "failed to download Consul ${CONSUL_VERSION}"; fi
 
     common::mk_bindir
     
@@ -30,18 +30,19 @@ consul::bind_interface () {
     elif [ ! "$KON_BIND_INTERFACE" == "" ]; then
         CONSUL_BIND_INTERFACE=$KON_BIND_INTERFACE
     else
-        error "No network interface for bind address. Set KON_BIND_INTERFACE in config or us --interface <value> argument"
+        error "no network interface for bind address. Set KON_BIND_INTERFACE in config or us --interface <value> argument"
         exit 1
     fi
-    info "Using bind interface $CONSUL_BIND_INTERFACE"
+    info "using bind interface $CONSUL_BIND_INTERFACE"
 }
 
 ###############################################################################
 # Creates a resolv.conf that points to Consul and enables it.
 ###############################################################################
 consul::enable-consul-dns () {
+    info "switching nameserver to consul"
     if [ -L /etc/resolv.conf ] && [ ! "$(readlink /etc/resolv.conf)" == "/etc/kon/resolv.conf" ]; then
-        info "Creating symlink /etc/resolv.conf -> /etc/kon/resolv.conf"
+        info "creating symlink /etc/resolv.conf -> /etc/kon/resolv.conf"
         cat <<EOF > /etc/kon/resolv.conf
 #Using Consul as ns
 nameserver 127.0.0.1    
@@ -59,7 +60,7 @@ EOF
 ###############################################################################
 consul::disable-consul-dns () {
     if [ ! -f "$KON_INSTALL_DIR/resolv_conf_org" ]; then
-        fail "No resolv.conf target found, can't restore."
+        fail "no resolv.conf target found, can't restore."
     fi
     org_link_target=$(cat $KON_INSTALL_DIR/resolv_conf_org)
 
@@ -69,7 +70,7 @@ consul::disable-consul-dns () {
     
     rm /etc/resolv.conf
     ln -s $org_link_target /etc/resolv.conf
-    if [ $? -gt 0 ]; then fail "Failed to restore DNS config!"; fi
+    if [ $? -gt 0 ]; then fail "failed to restore DNS config!"; fi
 }
 
 consul::start-bootstrap () {
@@ -82,12 +83,16 @@ consul::start-bootstrap () {
         fail "Invalid nameserver for consul recursors: $kon_nameserver"
     fi
 
-    info "Starting Consul ..."
     consul::bind_interface
+    consul::check_start_params
+    info "starting Consul ..."
+
     docker run -d --name kon-consul \
     --restart=always \
     --network=host \
     -v /var/lib/consul:/consul/data \
+    -v /etc/consul:/consul/config \
+    -v /etc/kon/pki:/etc/kon/pki \
     -e 'CONSUL_ALLOW_PRIVILEGED_PORTS=true' \
     -e 'CONSUL_CLIENT_INTERFACE=lo' \
     -e "CONSUL_BIND_INTERFACE=$CONSUL_BIND_INTERFACE" \
@@ -95,19 +100,19 @@ consul::start-bootstrap () {
     -dns-port=53 \
     -recursor=$kon_nameserver \
     -datacenter="$(config::get_dc)" \
+    -encrypt=$KON_CONSUL_ENCRYPTION_KEY \
     -bootstrap-expect=1
 
-    info "Switching nameserver to consul"
     consul::enable-consul-dns
 }
 
 consul::start () {
 
     if [ -z "$KON_SEVERS"]; then
-        info "Is server: $(common::is_server), server list: $KON_SEVERS, ip address: $(common::ip_addr)"
+        info "is server: $(config::is_server), server list: $KON_SERVERS, ip address: $(common::ip_addr)"
     fi
 
-    if [ "$(common::is_server)" == "true" ]; then
+    if [ "$(config::is_server)" == "true" ]; then
         agent_type="agent -server"
     else
         agent_type="agent"
@@ -116,23 +121,26 @@ consul::start () {
     if [ "$kon_nameserver" == "" ]; then
         kon_nameserver=$(cat /etc/resolv.conf | grep nameserver | head -1 | awk '{print $2}')
         if [ "$kon_nameserver" == "" ] || [ "$kon_nameserver" == "127.0.0.1" ]; then
-            fail "Invalid nameserver for consul recursors: $kon_nameserver"
+            fail "invalid nameserver for consul recursors: $kon_nameserver"
         fi
     fi
 
     if [ -n "$KON_DEV" ]; then
         consul::start_dev
-        common::fail_on_error "Failed to start consul in development mode."
+        common::fail_on_error "failed to start consul in development mode."
         return 0;
     fi
 
-    info "Starting Consul $agent_type in datacenter:$(config::get_dc) ..."
     consul::bind_interface
+    consul::check_start_params
+    info "starting Consul $agent_type in datacenter:$(config::get_dc) ..."
 
     docker run -d --name kon-consul \
     --restart=always \
     --network=host \
     -v /var/lib/consul:/consul/data \
+    -v /etc/consul:/consul/config \
+    -v /etc/kon/pki:/etc/kon/pki \
     -e 'CONSUL_ALLOW_PRIVILEGED_PORTS=true' \
     -e 'CONSUL_CLIENT_INTERFACE=lo' \
     -e "CONSUL_BIND_INTERFACE=$CONSUL_BIND_INTERFACE" \
@@ -141,44 +149,59 @@ consul::start () {
     -recursor=$kon_nameserver \
     -retry-join=$KON_BOOTSTRAP_SERVER \
     -datacenter="$(config::get_dc)" \
-    -encrypt="$KON_CONSUL_ENCRYPT_KEY"
+    -encrypt=$KON_CONSUL_ENCRYPTION_KEY
 
-    info "Switching nameserver to consul"
     consul::enable-consul-dns
 }
 
 consul::start_dev () {
-    info "Starting Consul in development mode and in datacenter:$(config::get_dc) ..."
     consul::bind_interface
+    consul::check_start_params
+    info "starting Consul in development mode and in datacenter:$(config::get_dc) ..."
 
     docker run -d --name kon-consul \
     --restart=always \
     --network=host \
     -v /var/lib/consul:/consul/data \
+    -v /etc/consul:/consul/config \
+    -v /etc/kon/pki:/etc/kon/pki \
     -e 'CONSUL_ALLOW_PRIVILEGED_PORTS=true' \
     -e 'CONSUL_CLIENT_INTERFACE=lo' \
     -e "CONSUL_BIND_INTERFACE=$CONSUL_BIND_INTERFACE" \
     consul:$CONSUL_VERSION agent -dev \
     -dns-port=53 \
     -recursor=$kon_nameserver \
-    -datacenter="$(config::get_dc)" \
-    -encrypt="$KON_CONSUL_ENCRYPT_KEY"
+    -datacenter=$(config::get_dc) \
+    -encrypt=$KON_CONSUL_ENCRYPTION_KEY
 
-    info "Switching nameserver to consul"
     consul::enable-consul-dns   
 }
 
+consul::check_start_params () {
+    if [ ! $kon_nameserver ]; then fail "no recursor"; fi
+    if [ ! $CONSUL_BIND_INTERFACE ]; then fail "no network interface"; fi
+    if [ ! $CONSUL_VERSION ]; then fail "no Consul version"; fi
+    if [ ! $KON_CONSUL_ENCRYPTION_KEY ]; then fail "no encryption key"; fi
+    if [ ! -f "$KON_CONSUL_CONFIG_TLS" ]; then fail "no Consul TLS config"; fi
+    pki::check_ca_cert
+    pki::check_consul
+}
+
+###############################################################################
+# Restores the DNS config and stopps the Consul docker container.
+###############################################################################
 consul::stop () {
-    docker stop kon-consul
-    docker rm -f kon-consul
+    consul::disable-consul-dns
+    docker stop kon-consul > $(common::dev_null) 2>&1
+    docker rm -f kon-consul > $(common::dev_null) 2>&1
 }
 
 consul::wait_for_started () {
     for (( ;; )); do
         sleep 10
-        info "Waiting for consul to start..."
+        info "waiting for consul to start..."
         if [ "$(docker ps -f 'name=kon-consul' --format '{{.Names}}')" == "kon-consul" ]; then
-            info "Bootstrap Consul started!"
+            info "bootstrap Consul started!"
             break;
         fi 
     done
@@ -236,5 +259,25 @@ consul::generate_encryption_key () {
         if [ $? -gt 0 ]; then fail "failed to generate encryption key using consul Docker image"; fi
     fi
     echo "$consul_encryption_key"
+}
+
+consul::is_running () {
+    if [ $(docker ps -q -f "name=kon-consul") ]; then
+        echo "true"
+    fi
+}
+
+consul::write_tls_config () {
+    mkdir -p $KON_CONSUL_CONFIG_DIR
+    cat << EOF > $KON_CONSUL_CONFIG_TLS
+{
+  "verify_server_hostname": true,
+  "verify_incoming": true,
+  "verify_outgoing": true,
+  "key_file": "/etc/kon/pki/consul.key",
+  "cert_file": "/etc/kon/pki/consul.crt",
+  "ca_file": "/etc/kon/pki/ca.crt"
+}
+EOF
 }
 

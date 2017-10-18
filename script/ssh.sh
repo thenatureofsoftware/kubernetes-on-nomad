@@ -30,16 +30,22 @@ ssh::copy () {
     elif [ "$KON_VAGRANT_SSH" == "true" ]; then
         vagrant scp $active_config $(ssh::host):~/
         vagrant scp $BASEDIR/kon $(ssh::host):~/
+        vagrant scp $KON_PKI_DIR $(ssh::host):~/pki
     else
         scp $active_config $(ssh::user)$(ssh::host):~/
         scp $BASEDIR/kon $(ssh::user)$(ssh::host):~/
+        scp $KON_PKI_DIR $(ssh::user)$(ssh::host):~/pki
     fi
 }
 
 ssh::install_kon () {
     if [ "$KON_DEV" == "true" ]; then
             $(ssh::cmd) << EOF
-sudo /kon-dev/update-all.sh
+sudo /kon-dev/update-all.sh \
+&& sudo mv ~/pki /etc/kon/ \
+&& sudo mv /etc/kon/pki/consul-*.crt /etc/kon/pki/consul.crt \
+&& sudo mv /etc/kon/pki/consul-*.csr /etc/kon/pki/consul.csr \
+&& sudo mv /etc/kon/pki/consul-*.key /etc/kon/pki/consul.key
 EOF
     else
     $(ssh::cmd) << EOF
@@ -47,7 +53,11 @@ sudo mkdir -p /opt/bin \
 && sudo mv ~/kon /opt/bin \
 && sudo chmod a+x /opt/bin/kon \
 && sudo mkdir -p /etc/kon \
-&& sudo cp ~/kon.conf /etc/kon/
+&& sudo cp ~/kon.conf /etc/kon/ \
+&& sudo mv ~/pki /etc/kon/ \
+&& sudo mv /etc/kon/pki/consul-*.crt /etc/kon/pki/consul.crt \
+&& sudo mv /etc/kon/pki/consul-*.csr /etc/kon/pki/consul.csr \
+&& sudo mv /etc/kon/pki/consul-*.key /etc/kon/pki/consul.key 
 EOF
     fi
 }

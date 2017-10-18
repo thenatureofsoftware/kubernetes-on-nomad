@@ -6,11 +6,27 @@
 
 cluster::start () {
 
+    KON_PKI_DIR=$PWD/.pki
+
+    mkdir -p $KON_PKI_DIR/
+
     # Verify encryption keys.
     cluster::verify_encryption_keys
 
+    # Generate CA
+    pki::generate_ca
+
     for node in ${!config_nodes[@]}
     do
+
+        if [ "$(config::is_server $node)" == "true" ]; then
+            cn="server.$(config::get_dc $node).consul"
+        else
+            cn="$(config::get_host $node).$(config::get_dc $node).consul"
+        fi
+        
+        info "generating certificates for consul $cn"
+        pki::generate_consul_cert $cn
         
         KON_SSH_HOST="$(config::get_host $node)"
         if [ "$KON_SSH_HOST" == "" ]; then
@@ -18,6 +34,8 @@ cluster::start () {
         fi
         info "$KON_SSH_HOST will be used as node"
         cluster::start_node
+
+        pki::clean_up_certs $cn
     done
 }
 

@@ -30,6 +30,7 @@ Consul Commands:
   consul install           Installs Consul
   consul start             Starts Consul, --bootstrap and --interface arguments are required
   consul start bootstrap   Starts a bootstrap Consul, --interface argument are required 
+  consul stop              Disables Consul DNS and restores the original resolve config and stopps the local Consul agent.
   consul dns enable        Enables all DNS lookups through Consul
   consul dns disable       Disables all DNS lookups through Consul and restores the original config
 
@@ -52,6 +53,7 @@ Kubernetes Commands:
 Other Commands:
   addon dns                Installs dns addon.
   view status              Shows kon status.
+  update                   Update to the latest version.
 
 EOF
 }
@@ -63,9 +65,9 @@ exit 11  #)Created by argbash-init v2.5.0
 # ARG_OPTIONAL_BOOLEAN([debug], , [Run kon in debug mode (bash -x)], [off])
 # ARG_OPTIONAL_BOOLEAN([quiet], , [Quiet mode, output less], [off])
 # ARG_OPTIONAL_BOOLEAN([print], , [A boolean option with long flag (and implicit default: off)])
-# ARG_POSITIONAL_MULTI([command], [Positional arg description], [3], [""])
+# ARG_POSITIONAL_MULTI([command], [Positional arg description], [3], [""], [""])
 # ARG_HELP([KON helps you setup and run Kubernetes On Nomad (KON).\n], [$(help_msg)])
-# ARG_VERSION([echo $(cat $BASEDIR/version)])
+# ARG_VERSION([echo $(cat $SCRIPTDIR/version)])
 # ARGBASH_SET_INDENT([  ])
 # ARGBASH_GO
 

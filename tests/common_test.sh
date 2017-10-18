@@ -2,17 +2,18 @@
 
 TESTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 source $TESTDIR/../script/test.sh
+test_name="test::common::"
 
 test::common::check_cmd () {
     source $SCRIPTDIR/common.sh
 
-    assert "common::check_cmd_exists" "$(common::check_cmd cat)" "" 
-    assert "common::check_cmd_doesn't_exists" "$(common::check_cmd nixpix)" "nixpix not found"
+    assert "check_cmd_exists" "$(common::check_cmd cat)" "" 
+    assert "check_cmd_doesn't_exists" "$(common::check_cmd nixpix)" "nixpix not found"
     
     if [ -z "$(common::check_cmd cat)" ]; then
-        assert "common::check_cmd_in_if" "$(common::check_cmd cat)" ""
+        assert "check_cmd_in_if" "$(common::check_cmd cat)" ""
     else
-        assert "common::check_cmd_in_if" "" "fail, should not be reached"
+        assert "check_cmd_in_if" "" "fail, should not be reached"
     fi
 }
 
@@ -22,21 +23,21 @@ test::common::logfile () {
     unset KON_LOG_FILE
     unset NO_LOG
     # Write logs to /var/log/kon.log
-    assert "common::logfile_var_log" "$(common::logfile)" "/var/log/kon.log"
+    assert "logfile_var_log" "$(common::logfile)" "/var/log/kon.log"
 
     KON_LOG_FILE=$TESTDIR/kon.log
-    assert "common::logfile_logfile" "$(common::logfile)" "$TESTDIR/kon.log"
+    assert "logfile_logfile" "$(common::logfile)" "$TESTDIR/kon.log"
 
     # Write logs to /dev/null
     NO_LOG=true
-    assert "common::logfile_dev_null" "$(common::logfile)" "$(common::dev_null)"
+    assert "logfile_dev_null" "$(common::logfile)" "$(common::dev_null)"
 }
 
 test::common::which () {
     source $SCRIPTDIR/common.sh
 
-    assert "common::which_command_installed" "$(common::which cat)" "$(which cat)"
-    assert "common::which_command_not_installed" "$(common::which nixpix)" ""
+    assert "which_command_installed" "$(common::which cat)" "$(which cat)"
+    assert "which_command_not_installed" "$(common::which nixpix)" ""
 }
 
 test::common::fail_on_error () {
@@ -46,15 +47,15 @@ test::common::fail_on_error () {
     msg="Failed to list files with -J option"
     ls -J > /dev/null 2>&1
     actual=$(common::fail_on_error "$msg")
-    assert "common::fail_on_error" "$actual" "$(fail "$msg")"
+    assert "fail_on_error" "$actual" "$(fail "$msg")"
 
     ls -J > /dev/null 2>&1
     actual=$(common::fail_on_error)
-    assert "common::fail_on_error_no_message" "$actual" "$(fail "A command returned non-zero exit: 1")"
+    assert "fail_on_error_no_message" "$actual" "$(fail "A command returned non-zero exit: 1")"
 
     ls > /dev/null 2>&1
     actual=$(common::fail_on_error)
-    assert "common::fail_on_error_no_failure" "$actual" ""
+    assert "fail_on_error_no_failure" "$actual" ""
 }
 
 test::common::error_on_error () {
@@ -63,20 +64,20 @@ test::common::error_on_error () {
     msg="Failed to list files with -J option"
     ls -J > /dev/null 2>&1
     actual=$(common::error_on_error "$msg")
-    assert "common::error_on_error" "$actual" "$(error "$msg")"
+    assert "error_on_error" "$actual" "$(error "$msg")"
 
     ls -J > /dev/null 2>&1
     actual=$(common::error_on_error)
-    assert "common::error_on_error_no_message" "$actual" "$(error "A command returned non-zero exit: 1")"
+    assert "error_on_error_no_message" "$actual" "$(error "A command returned non-zero exit: 1")"
 
     ls > /dev/null 2>&1
     actual=$(common::error_on_error)
-    assert "common::error_on_error_no_failure" "$actual" ""
+    assert "error_on_error_no_failure" "$actual" ""
 
     NO_LOG=true
     info "$(ls -J > /dev/null 2>&1)"
     actual=$(common::error_on_error)
-    assert "common::error_on_error_logged_cmd" "$actual" "$(error "A command returned non-zero exit: 1")"
+    assert "error_on_error_logged_cmd" "$actual" "$(error "A command returned non-zero exit: 1")"
 }
 
 test::common::is_bootstrap_server () {
@@ -84,10 +85,10 @@ test::common::is_bootstrap_server () {
     ip_addr=$(common::ip_addr)
 
     KON_BOOTSTRAP_SERVER="$ip_addr"
-    assert "common::common::is_bootstrap_server_true" "$(common::is_bootstrap_server)" "true"
+    assert "common::is_bootstrap_server_true" "$(common::is_bootstrap_server)" "true"
 
     KON_BOOTSTRAP_SERVER="0.0.0.0"
-    assert "common::common::is_bootstrap_server_false" "$(common::is_bootstrap_server)" "false"
+    assert "is_bootstrap_server_false" "$(common::is_bootstrap_server)" "false"
 }
 
 (test::common::check_cmd)

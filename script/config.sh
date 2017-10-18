@@ -9,6 +9,24 @@ declare -A config_minions
 config_bootstrap_server=""
 
 ###############################################################################
+# Returns true or false if the IP-address is included in KON_SERVERS
+# Param: $1 IP-address (optional)
+###############################################################################
+config::is_server () {
+    if [ ! "$1" == "" ]; then
+        ip_address="$1"
+    else
+        ip_address="$(common::ip_addr)"
+    fi
+
+    if [ "$(echo $KON_SERVERS | grep $ip_address)" == "" ]; then
+        echo "false"
+    else
+        echo "true"
+    fi
+}
+
+###############################################################################
 # Returns the hostname for a server given it's IP-address.
 # Param: $1 IP-address
 ###############################################################################
@@ -82,8 +100,8 @@ config::nodes () {
   read -r -a servers <<< "$(echo $KON_SERVERS | sed 's/ //g' | sed 's/,/ /g')"
   
   for server in ${servers[@]}; do
-    local ip_address="$(echo $server|awk -F ':' '{print $4}')"
-    local meta_info="$(echo $server|awk -F ':' '{print $3 ":" $1 ":" $2}')"
+    local ip_address="$(config::node_ip $server)"
+    local meta_info="$(config::node_meta $server)"
     config_nodes[$ip_address]=$meta_info
   done
 
@@ -96,8 +114,8 @@ config::nodes () {
   unset IFS
   
   for server in ${servers[@]}; do
-    local ip_address="$(echo $server|awk -F ':' '{print $4}')"
-    local meta_info="$(echo $server|awk -F ':' '{print $3 ":" $1 ":" $2}')"
+    local ip_address="$(config::node_ip $server)"
+    local meta_info="$(config::node_meta $server)"
     config_nodes[$ip_address]=$meta_info
     config_minions[$ip_address]="$(echo $meta_info | awk -F ':' '{print $1}')"
   done
@@ -180,17 +198,72 @@ config::bootstrap_server () {
 }
 
 ###############################################################################
+# Returns the region part of a server config:
+# <region>:<datacenter>:<hostname>:<IP-address>
+# Param $1 a server config
+###############################################################################
+function config::node_region () {
+  s_conf=$(config::node_param_check $1)
+  echo $s_conf | awk -F ':' '{print $1}'
+}
+
+###############################################################################
+# Returns the datacenter part of a server config:
+# <region>:<datacenter>:<hostname>:<IP-address>
+# Param $1 a server config
+###############################################################################
+function config::node_dc () {
+  s_conf=$(config::node_param_check $1)
+  echo $s_conf | awk -F ':' '{print $2}'
+}
+
+###############################################################################
+# Returns the hostname part of a server config:
+# <region>:<datacenter>:<hostname>:<IP-address>
+# Param $1 a server config
+###############################################################################
+function config::node_hostname () {
+  s_conf=$(config::node_param_check $1)
+  echo $s_conf | awk -F ':' '{print $3}'
+}
+
+###############################################################################
+# Returns the IP-address part of a server config:
+# <region>:<datacenter>:<hostname>:<IP-address>
+# Param $1 a server config
+###############################################################################
+function config::node_ip () {
+  s_conf=$(config::node_param_check $1)
+  echo $s_conf | awk -F ':' '{print $4}'
+}
+
+###############################################################################
+# Returns the meta-info of a server config:
+# <region>:<datacenter>:<hostname>:<IP-address>
+# Param $1 a server config
+###############################################################################
+function config::node_meta () {
+  s_conf=$(config::node_param_check $1)
+  echo $s_conf | awk -F ':' '{print $3 ":" $1 ":" $2}'
+}
+
+function config::node_param_check () {
+  echo $1
+  if [ ! "$1" ]; then fail "a server entry (<region>:<datacenter>:<hostname>:<IP-address>) is required"; fi
+}
+
+###############################################################################
 # Loads configuration file                                                    #
 ###############################################################################
 config::configure () {
 
   avtive_config=""
 
-  if [ ! "$_arg_config" == "" ] && [ -f "$_arg_config" ]; then
+  if [ "$_arg_config" ] && [ -f "$_arg_config" ]; then
       active_config=$_arg_config
   elif [ -f "$KON_CONFIG" ]; then
       active_config=$KON_CONFIG
-  elif [ ! "$(common::which consul)" == "" ] && touch $KON_CONFIG > $(common::dev_null) 2>&1; then
+  elif [ ! "$(common::which consul)" == "" ] && [ $(docker ps -q -f "name=kon-consul") ] && touch $KON_CONFIG > $(common::dev_null) 2>&1; then
       mkdir -p $KON_INSTALL_DIR
       consul::get $konConfigKey > $KON_CONFIG 2>&1
       if [ $? -eq 0 ]; then
@@ -200,7 +273,7 @@ config::configure () {
       fi
   fi
 
-  if [ ! "$active_config" == "" ]; then
+  if [ -f "$active_config" ]; then
       source $active_config
       info "read configuration from $active_config"
 
@@ -209,7 +282,7 @@ config::configure () {
       fi
 
       if [ -f "$KON_CONFIG" ]; then
-          if [ ! "$(common::which consul)" == "" ]; then
+          if [ ! "$(common::which consul)" == "" ] && [ $(docker ps -q -f "name=kon-consul") ]; then
             consul::put_file $konConfig $KON_CONFIG > "$(common::dev_null)" 2>&1
             if [ $? -eq 0 ]; then consul::put $configStateKey $OK; fi
           fi
@@ -258,7 +331,7 @@ KON_BIND_INTERFACE=enp0s8
 # List of Consul and Nomad servers
 # <region>:<datacenter>:<hostname>:<ip addr>
 ###############################################################################
-KON_SERVERS=swe:east:172.17.4.101,swe:west:172.17.4.102,swe:north:172.17.4.103
+KON_SERVERS=swe:east:core-01:172.17.4.101,swe:west:core-02:172.17.4.102,swe:north:core-03:172.17.4.103
 
 ###############################################################################
 # List of comma separated addresses <scheme>://<ip>:<port>
