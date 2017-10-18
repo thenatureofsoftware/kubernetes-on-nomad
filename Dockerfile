@@ -6,12 +6,11 @@ RUN apk add --no-cache bash \
     && mkdir -p /kon/nomad/job
 
 COPY kon.sh /kon/
-COPY version /kon/
 COPY script /kon/script/
 COPY nomad/job /kon/nomad/job/
 COPY nomad/*.* /kon/nomad/
 
-VOLUME [ "/etc/kon" ]
+VOLUME [ "/opt/kon" ]
 
 ENTRYPOINT [ "/kon/kon.sh" ]
 

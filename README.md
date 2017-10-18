@@ -6,7 +6,9 @@ Kubernetes-On-Nomad `kon` is a tool for simplifying running [Kubernetes](https:/
 
 It's not involved during runtime but helps you setup Nomad, Consul and Kubernetes together.
 
-## Why
+## Why running Kubernetes on Nomad
+
+There are similarities between Nomad and Kubernetes but there are also some key differences [(see Nomad vs. Kubernetes)](https://www.nomadproject.io/intro/vs/kubernetes.html). The main thing is that they are both **tools** in our toolbox. Nomad and Consul are both master-less which is something we can use.
 
 * All etcd and kubernetes configuration and certificates stored in Consul (Vault coming soon)
 * Simple handling of Kubernetes infrastructure and control plane
@@ -25,7 +27,7 @@ Edit `kon.conf` and add all your machines. Then run `cluster start` on any machi
 $ kon --config ./kon.conf cluster start
 ```
 
-Then login on any node and run:
+Then login to any node and run:
 ```
 core-01 ~ # kon generate all
 core-01 ~ # kon etcd start

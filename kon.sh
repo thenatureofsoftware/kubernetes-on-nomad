@@ -3,19 +3,27 @@
 BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Installation directory for all scripts.
-KON_INSTALL_DIR=${INSTALL_DIR:=/etc/kon}
+KON_INSTALL_DIR=${KON_INSTALL_DIR:=/opt/kon}
+
+# Configuration directory
+KON_CONFIG_DIR=${KON_CONFIG_DIR:=/etc/kon}
+
+# Certificates and keys
+KON_PKI_DIR=$KON_CONFIG_DIR/pki
 
 SCRIPTDIR=$BASEDIR/script
 BINDIR=${BINDIR:=/opt/bin}
 JOBDIR=$BASEDIR/nomad/job
 
-KON_CONFIG=$KON_INSTALL_DIR/kon.conf
+KON_CONFIG=$KON_CONFIG_DIR/kon.conf
 KON_LOG_FILE=${KON_LOG_FILE:=/var/log/kon.log}
 K8S_CONFIGDIR=${K8S_CONFIGDIR:=/etc/kubernetes}
-K8S_PKIDIR=${K8S_PKIDIR:=$K8S_CONFIGDIR/pki}
+K8S_PKI_DIR=${K8S_PKI_DIR:=$K8S_CONFIGDIR/pki}
 
 # Consul
-CONSUL_VERSION=${CONSUL_VERSION:=0.9.3}
+CONSUL_VERSION=${CONSUL_VERSION:=1.0.0}
+KON_CONSUL_CONFIG_DIR=${KON_CONSUL_CONFIG_DIR:=/etc/consul}
+KON_CONSUL_CONFIG_TLS=$KON_CONSUL_CONFIG_DIR/tls.json
 
 # Nomad
 NOMAD_VERSION=${NOMAD_VERSION:=0.7.0-beta1}
@@ -72,6 +80,7 @@ OK="OK"
 source $SCRIPTDIR/arguments.sh
 source $SCRIPTDIR/common.sh
 source $SCRIPTDIR/config.sh
+source $SCRIPTDIR/pki.sh
 source $SCRIPTDIR/consul.sh
 source $SCRIPTDIR/nomad.sh
 source $SCRIPTDIR/kubernetes.sh
@@ -83,20 +92,16 @@ source $SCRIPTDIR/cluster.sh
 ###############################################################################
 kon::install_script () {
     TARGET=$KON_INSTALL_DIR
-    printf "%s\n" "Installing kubernetes-on-nomad to directory: $TARGET"
+    printf "%s\n" "installing kubernetes-on-nomad to directory: $TARGET"
     if [ -d "$TARGET/script" ] || [ -f "$TARGET/kon.sh" ]; then
-        printf "%s\n" "Error: target directory: $TARGET is not empty!"
+        printf "%s\n" "error: target directory: $TARGET is not empty!"
         return 1
     fi
     
-    mkdir -p $TARGET/script
+    mkdir -p $TARGET/{script,nomad/job}
     cp $SCRIPTDIR/* $TARGET/script
-    
-    mkdir -p $TARGET/nomad/job
     cp $JOBDIR/*.nomad $TARGET/nomad/job
-
     cp $BASEDIR/kon.sh $TARGET/
-    cp $BASEDIR/version $TARGET/
 
     chmod a+x $TARGET/script/*.sh
     chmod a+x $TARGET/kon.sh
@@ -107,11 +112,11 @@ kon::install_script () {
 ###############################################################################
 kon::generate_certificates () {
     if [ ! "$(common::which kubeadm)" ]; then fail "kubeadm not installed, please install it first (kon kubernetes install)"; fi
-    info "cleaning up any certificates in $K8S_PKIDIR"
-    if [ -d "$K8S_PKIDIR" ]; then
-        rm -rf $K8S_PKIDIR/*
+    info "cleaning up any certificates in $K8S_PKI_DIR"
+    if [ -d "$K8S_PKI_DIR" ]; then
+        rm -rf $K8S_PKI_DIR/*
     else
-        mkdir -p $K8S_PKIDIR
+        mkdir -p $K8S_PKI_DIR
     fi
 
     # Get any existing certificates from Consul
@@ -148,7 +153,7 @@ kon::generate_kubeconfigs () {
     done
 
     # kubeconfig for controller-manager
-    info "$(kubeadm alpha phase kubeconfig controller-manager --cert-dir=$K8S_PKIDIR --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
+    info "$(kubeadm alpha phase kubeconfig controller-manager --cert-dir=$K8S_PKI_DIR --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
     common::fail_on_error "failed to generate kubeconfig for controller-manager"
     info "$(kubectl --kubeconfig=$K8S_CONFIGDIR/controller-manager.conf config set-cluster kubernetes --server=$KUBE_APISERVER_ADDRESS)"
     common::fail_on_error "failed to update apiserver address in kubeconfig for controller-manager"
@@ -156,7 +161,7 @@ kon::generate_kubeconfigs () {
     info "\n$(consul::put_file $controllerMgrKubeconfigKey $K8S_CONFIGDIR/controller-manager.conf)"
 
     # kubeconfig for scheduler
-    info "$(kubeadm alpha phase kubeconfig scheduler --cert-dir=$K8S_PKIDIR --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
+    info "$(kubeadm alpha phase kubeconfig scheduler --cert-dir=$K8S_PKI_DIR --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
     common::fail_on_error "failed to generate kubeconfig for scheduler"
     info "$(kubectl --kubeconfig=$K8S_CONFIGDIR/scheduler.conf config set-cluster kubernetes --server=$KUBE_APISERVER_ADDRESS)"
     common::fail_on_error "failed to update apiserver address in kubeconfig for scheduler"
@@ -164,7 +169,7 @@ kon::generate_kubeconfigs () {
     info "\n$(consul::put_file $schedulerKubeconfigKey $K8S_CONFIGDIR/scheduler.conf)"
 
     # kubeconfig for admin
-    info "$(kubeadm alpha phase kubeconfig admin --cert-dir=$K8S_PKIDIR --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
+    info "$(kubeadm alpha phase kubeconfig admin --cert-dir=$K8S_PKI_DIR --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
     common::fail_on_error "failed to generate kubeconfig for admin"
     info "$(kubectl --kubeconfig=$K8S_CONFIGDIR/admin.conf config set-cluster kubernetes --server=$KUBE_APISERVER_ADDRESS)"
     common::fail_on_error "failed to update apiserver address in kubeconfig for admin"
@@ -181,7 +186,7 @@ kon::generate_kubeconfig () {
     info "generating kubeconfig for minion: $1 with ip: $2"
     rm $K8S_CONFIGDIR/kubelet.conf > /dev/null 2>&1
     info "$(kubeadm alpha phase kubeconfig kubelet \
-    --cert-dir=$K8S_PKIDIR --node-name=$1 --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
+    --cert-dir=$K8S_PKI_DIR --node-name=$1 --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
     common::fail_on_error "failed to generate kubeconfig for minion: $1 with ip: $2"
     info "$(kubectl --kubeconfig=/etc/kubernetes/kubelet.conf config set-cluster kubernetes --server=$KUBE_APISERVER_ADDRESS)"
     common::fail_on_error "failed to update apiserver address in kubeconfig for minion: $1 with ip: $2"
@@ -195,11 +200,11 @@ kon::generate_kubeconfig () {
 ###############################################################################
 kon::put_cert_and_key() {
     info "Storing key and cert for $1"
-    consul::put_file $certsKey/$1/key $K8S_PKIDIR/$1.key
+    consul::put_file $certsKey/$1/key $K8S_PKI_DIR/$1.key
     if [ "$1" == "sa" ]; then
-        consul::put_file $certsKey/$1/cert $K8S_PKIDIR/$1.pub
+        consul::put_file $certsKey/$1/cert $K8S_PKI_DIR/$1.pub
     else
-        consul::put_file $certsKey/$1/cert $K8S_PKIDIR/$1.crt
+        consul::put_file $certsKey/$1/cert $K8S_PKI_DIR/$1.crt
     fi
 }
 
@@ -210,11 +215,11 @@ kon::get_cert_and_key() {
     consul kv get $certsKey/$1/key > /dev/null 2>&1
     if [ $? -eq 0 ]; then
         info "Found key and cert pair for $certsKey/$1"
-        consul kv get $certsKey/$1/key > $K8S_PKIDIR/$1.key
+        consul kv get $certsKey/$1/key > $K8S_PKI_DIR/$1.key
         if [ "$1" == "sa" ]; then
-            consul kv get $certsKey/$1/cert > $K8S_PKIDIR/$1.pub
+            consul kv get $certsKey/$1/cert > $K8S_PKI_DIR/$1.pub
         else
-            consul kv get $certsKey/$1/cert > $K8S_PKIDIR/$1.crt
+            consul kv get $certsKey/$1/cert > $K8S_PKI_DIR/$1.crt
         fi
     fi
 }
@@ -286,7 +291,12 @@ kon::load_kube_proxy_config () {
 # Sets up a node.
 ###############################################################################
 setup-node () {
+    
+    if [ "$(consul::is_running)" ]; then consul::stop; fi
+    
     consul::install
+    consul::write_tls_config
+    
     if [ "$(common::is_bootstrap_server)" == "true" ] && [ ! "$KON_DEV" == "true" ]; then
         info "starting bootstrap consul..."
         consul-start-bootstrap
@@ -476,15 +486,15 @@ kubernetes-install () {
 kubernetes-reset () {
     kubernetes-stop
     consul::delete_all $kubernetesKey
-    consul::put $certificateStateKey "-"
-    consul::put $kubeconfigStateKey "-"
-    rm -rf $K8S_PKIDIR/*
+    consul::put $certificateStateKey ""
+    consul::put $kubeconfigStateKey ""
+    rm -rf $K8S_PKI_DIR/*
     rm -rf $K8S_CONFIGDIR/*.*
 }
 
 kubernetes-start () {
-    if [ ! "$(consul::get $certificateStateKey)" == "OK" ]; then fail "certificates missing"; fi
-    if [ ! "$(consul::get $kubeconfigStateKey)" == "OK" ]; then fail "kubeconfig missing"; fi
+    if [ ! "$(consul::get $certificateStateKey)" == $OK ]; then fail "certificates missing"; fi
+    if [ ! "$(consul::get $kubeconfigStateKey)" == $OK ]; then fail "kubeconfig missing"; fi
     if [ ! "$(consul::get $etcdStateKey)" == "$STARTED" ] && [ ! "$(consul::get $etcdStateKey)" == "$RUNNIG" ]; then fail "etcd is not started"; fi
     start-control-plane
     start-kubelet
@@ -536,15 +546,15 @@ consul-install () {
 
 consul-start-bootstrap () {
     if [ -z $(which consul) ]; then
-        error "Please install Consul binaries first (kon install consul)"
+        error "please install Consul binaries first (kon install consul)"
         exit 1
     fi
 
     if [ "$(docker ps -f 'name=kon-consul' --format '{{.Names}}')" == "kon-consul" ]; then
-        info "Bootstrap Consul is already running"
+        info "bootstrap Consul is already running"
     else 
         consul::start-bootstrap
-        common::fail_on_error "Failed to start consul"
+        common::fail_on_error "failed to start consul"
 
         consul::wait_for_started
     fi
@@ -560,7 +570,7 @@ consul-start-bootstrap () {
 
 consul-start () {
     if [ "$(common::which consul)" == "" ]; then
-        fail "Please install Consul binaries first (kon consul install)"
+        fail "please install Consul binaries first (kon consul install)"
     fi
     
     if [ ! "$_arg_bootstrap" == "" ]; then
@@ -568,16 +578,16 @@ consul-start () {
     fi
 
     if [ "$KON_BOOTSTRAP_SERVER" == "" ]; then
-        error "Consul Bootstrap server address required. Please set KON_BOOTSTRAP_SERVER in config or --bootstrap <value> argument"
+        error "Consul bootstrap server address required. Please set KON_BOOTSTRAP_SERVER in config or --bootstrap <value> argument"
         exit 1
     fi
-    info "Bootstrap server address: $KON_BOOTSTRAP_SERVER"
+    info "bootstrap server address: $KON_BOOTSTRAP_SERVER"
 
     if [ "$(docker ps -f 'name=kon-consul' --format '{{.Names}}')" == "kon-consul" ]; then
         info "Consul is already running"
     else 
         consul::start
-        common::fail_on_error "Failed to start consul"
+        common::fail_on_error "failed to start consul"
 
         consul::wait_for_started
     fi
@@ -586,25 +596,32 @@ consul-start () {
         mkdir -p $KON_INSTALL_DIR
         
         kon_nameserver=$(consul kv get kon/nameserver)
-        if [ $? -gt 0 ]; then fail "Failed to get nameserver from kon/nameserver"; fi
+        if [ $? -gt 0 ]; then fail "failed to get nameserver from kon/nameserver"; fi
 
-        info "Reading config from Consul"
+        info "reading config from Consul"
         info "$(consul kv get kon/config > $KON_CONFIG)"
 
         if [ $? -eq 0 ] && [ -f "$KON_CONFIG" ]; then
-            info "Reloading configuration from Consul."
+            info "reloading configuration from Consul."
             source $KON_CONFIG
-            info "Restarting Consul after new configuration"
+            info "restarting Consul after new configuration"
             
             consul::stop
-            common::fail_on_error "Failed to stop consul"
+            common::fail_on_error "failed to stop consul"
 
             consul::start
-            common::fail_on_error "Failed to start consul"
+            common::fail_on_error "failed to start consul"
 
             consul::wait_for_started
         fi
     fi
+}
+
+###############################################################################
+# Stopps the local Consul agent.
+###############################################################################
+consul-stop () {
+    consul::stop
 }
 
 ###############################################################################
@@ -622,7 +639,7 @@ consul-dns-disable () {
 }
 
 cluster-start () {
-    info "Experimental command that starts the whole cluster"
+    info "experimental command that starts the whole cluster"
     cluster::start
 }
 
@@ -715,6 +732,21 @@ view-state () {
     done
 }
 
+###############################################################################
+# Updates kon to the latest and greatest version
+###############################################################################
+update () {
+    info "updating ..."
+
+    # Remove old version
+    rm -rf $BASEDIR *
+
+    # Trigger install of new version
+    (KON_VERSION=latest kon --version > $(common::dev_null) 2>&1)
+
+    info "kon updated to version: $(kon --version)"
+}
+
 # Move to stage 1 init funcion
 #common::check_root
 common::mk_bindir
@@ -722,10 +754,10 @@ common::mk_bindir
 if [ "$1" == "install_script" ]; then
     kon::install_script
     if [ $? -gt 0 ]; then
-        printf "%s\n" "Error: failed to install script!"
+        printf "%s\n" "error: failed to install script!"
         exit 1
     else
-        printf "%s\n" "Script installed successfully!"
+        printf "%s\n" "script installed successfully!"
         exit 0
     fi
 fi
@@ -737,7 +769,10 @@ parse_commandline "$@"
 handle_passed_args_count
 assign_positional_args
 
-if [ $_arg_debug == on ]; then set -x; fi
+if [ $_arg_debug == on ]; then
+    PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+    set -x
+fi
 if [ $_arg_quiet == on ]; then NO_LOG=true; fi
 
 ###############################################################################
@@ -753,7 +788,7 @@ if [ "$_arg_quiet" == "off" ]; then
     if [ "$(common::which kubelet)" ]; then kubernetes_version="$(kubelet --version)"; fi
     if [ "$(common::which kubeadm)" ]; then kubeadm_version="kubeadm $(kubeadm version|awk -F':' '{ print $5 }'|awk -F',' '{print $1}'|sed 's/\"//g')"; fi
     cat $SCRIPTDIR/banner.txt
-    echo "$(cat $BASEDIR/version)"
+    echo "$(cat $SCRIPTDIR/version)"
     printf "$nomad_version, $consul_version, $kubernetes_version, $kubeadm_version\n\n"
 fi
 

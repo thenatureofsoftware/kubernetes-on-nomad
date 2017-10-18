@@ -156,14 +156,6 @@ common::ip_addr () {
     printf "%s" "$(ip addr show $KON_BIND_INTERFACE | grep "inet\b" | awk '{print $2}' | cut -d/ -f1)"
 }
 
-common::is_server () {
-    if [ "$(echo $KON_SERVERS | grep $(common::ip_addr))" == "" ]; then
-        echo "false"
-    else
-        echo "true"
-    fi
-}
-
 common::is_bootstrap_server () {
     if [ "$KON_BOOTSTRAP_SERVER" == "$(common::ip_addr)" ]; then
         echo "true"

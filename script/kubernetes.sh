@@ -1,49 +1,42 @@
 #!/bin/bash
 
 kubernetes::install () {
-    log "Installing kubelet, kubectl and kubeadm ..."
-    
-    case "$(common::os)" in
-        "Container Linux by CoreOS")
-            kubernetes::install_by_download
-            ;;
-        "Ubuntu")
-            kubernetes::install_by_apt
-            ;;
-        *)
-    esac
-    common::fail_on_error "Failed to install kubelet"
-
-    kubernetes::download_and_install "kubectl" "$K8S_VERSION"
-    common::fail_on_error "Failed to install kubectl"
-    
-    kubernetes::download_and_install "kubeadm" "$KUBEADM_VERSION"
-    common::fail_on_error "Failed to install kubeadm"
-
-    info "Done installing Kubernetes components"
+    info "installing Kubernetes components ..."
+    kubernetes::install_by_download
+    info "done installing Kubernetes components"
 }
 
 kubernetes::install_by_download () {
-    kubernetes::download_and_install "kubelet" "$K8S_VERSION"
-    common::fail_on_error "Failed to install kubelet"
+
     mkdir -p /etc/kubernetes/manifests
+    for kube_component in kubeadm kubectl kubelet kube-apiserver kube-scheduler kube-controller-manager; do
+        if [ ! $(common::which $kube_component) ]; then
+            
+            local version=""
+            if [ "$kube_component" == "kubeadm" ]; then
+                version=$KUBEADM_VERSION
+            else
+                version=$K8S_VERSION
+            fi
 
-    kubernetes::download_and_install "kube-apiserver" "$K8S_VERSION"
-    common::fail_on_error "Failed to install kube-apiserver"
+            kubernetes::download_and_install "$kube_component" "$version"
+            common::fail_on_error "failed to install $kube_component"
+        else
+            info "$kube_component already installed"
+        fi
+    done
+
     
-    kubernetes::download_and_install "kube-scheduler" "$K8S_VERSION"
-    common::fail_on_error "Failed to install kube-scheduler"
-
-    kubernetes::download_and_install "kube-controller-manager" "$K8S_VERSION"
-    common::fail_on_error "Failed to install kube-controller-manager"
-
-    info "Installing cni plugins..."
-    if [ "$CNI_VERSION" == "" ]; then fail "CNI_VERSION is not set, is KON_CONFIG loaded?"; fi
-
-    info "$CNI_VERSION"
-    mkdir -p /opt/cni/bin
-    curl -sL https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-amd64-$CNI_VERSION.tgz | tar zxv -C /opt/cni/bin > "$(common::dev_null)" 2>&1
-    common::fail_on_error "Failed to download cni plugins"
+    if [ ! -f "/opt/cni/bin/loopback" ]; then
+        if [ "$CNI_VERSION" == "" ]; then fail "CNI_VERSION is not set, is KON_CONFIG loaded?"; fi
+        info "installing cni plugins..."
+        info "$CNI_VERSION"
+        mkdir -p /opt/cni/bin
+        curl -sL https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-amd64-$CNI_VERSION.tgz | tar zxv -C /opt/cni/bin > "$(common::dev_null)" 2>&1
+        common::fail_on_error "failed to install cni plugins"
+    else
+        info "cni plugins already installed"
+    fi
 }
 
 kubernetes::install_by_apt () {
@@ -61,12 +54,12 @@ EOF
 
 kubernetes::download_and_install() {
     if [ "$1" == "" ] || [ "$2" == "" ]; then
-        fail "Both component and version is required, got component:$2 and version:$1"
+        fail "both component and version is required, got component:$2 and version:$1"
     fi
 
-    info "Downloading and installing: $1 version: $2"
+    info "downloading and installing: $1 version: $2"
     wget --quiet https://storage.googleapis.com/kubernetes-release/release/$2/bin/linux/amd64/$1
     chmod a+x $1
     mv $1 $BINDIR
-    info "Done installing $1"
+    info "done installing $1"
 }
