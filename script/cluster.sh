@@ -17,25 +17,16 @@ cluster::start () {
     pki::generate_ca
 
     for node in ${!config_nodes[@]}
-    do
+    do        
+        pki::generate_consul_cert $node $cn
+        pki::generate_nomad_cert $node $cn
 
-        if [ "$(config::is_server $node)" == "true" ]; then
-            cn="server.$(config::get_dc $node).consul"
-        else
-            cn="$(config::get_host $node).$(config::get_dc $node).consul"
-        fi
-        
-        info "generating certificates for consul $cn"
-        pki::generate_consul_cert $cn
-        
         KON_SSH_HOST="$(config::get_host $node)"
         if [ "$KON_SSH_HOST" == "" ]; then
             KON_SSH_HOST="$node"
         fi
         info "$KON_SSH_HOST will be used as node"
-        cluster::start_node
-
-        pki::clean_up_certs $cn
+        cluster::start_node $node
     done
 }
 
@@ -43,15 +34,17 @@ cluster::start () {
 # Starts the bootstrap server.
 ###############################################################################
 cluster::start_node () {
-    info "starting node $KON_SSH_HOST ..."
+    node=$1
+    info "starting node $node $KON_SSH_HOST ..."
     
     ssh::ping > "$(common::dev_null)" 2>&1
     if [ $? -gt 0 ]; then fail "failed to connect to node: $KON_SSH_HOST and user: $KON_SSH_USER"; fi
 
     # Copy config first.
-    ssh::copy
+    ssh::copy $node
 
-    ssh::install_kon > "$(common::dev_null)" 2>&1
+    #ssh::install_kon > "$(common::dev_null)" 2>&1
+    ssh::install_kon
 
     ssh::setup_node
 }

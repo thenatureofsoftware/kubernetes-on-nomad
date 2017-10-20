@@ -83,7 +83,7 @@ nomad::servers_config () {
     if [ "$arg_servers" == "" ]; then
         arg_servers="$KON_SERVERS"
         if [ "$arg_servers" == "" ]; then
-            fail "KON_SERVERS is not set, is KON_CONFIG loaded?"
+            fail "KON_SERVERS is not set, is KON_CONFIG loaded?"; return 1
         fi
     fi
 
@@ -185,11 +185,12 @@ EOF
 }
 
 nomad::client_template() {
-  cat <<EOF > "$1"
+    cert_bundle=$(pki::generate_name "consul" "$(common::ip_addr)")
+    cat <<EOF > "$1"
 bind_addr = "0.0.0.0"
 data_dir = "/var/lib/nomad"
 advertise {
- http = "${2}"
+ http = "127.0.0.1"
  rpc  = "${2}"
  serf = "${2}"
 }
@@ -210,15 +211,23 @@ client {
 consul {
   address = "127.0.0.1:8500"
 }
+tls {
+  http = false
+  rpc  = true
+  ca_file = "${KON_PKI_DIR}/ca.crt"
+  cert_file = "${KON_PKI_DIR}/${cert_bundle}.crt"
+  key_file = "${KON_PKI_DIR}/${cert_bundle}.key"
+}
 EOF
 }
 
 nomad::server_template() {
-  cat <<EOF > $1
+    cert_bundle=$(pki::generate_name "consul" "$(common::ip_addr)")
+    cat <<EOF > $1
 bind_addr = "0.0.0.0"
 data_dir = "/var/lib/nomad"
 advertise {
- http = "${2}"
+ http = "127.0.0.1"
  rpc  = "${2}"
  serf = "${2}"
 }
@@ -228,16 +237,24 @@ server {
 }
 consul {
   address = "127.0.0.1:8500"
+}
+tls {
+  http = false
+  rpc  = true
+  ca_file = "${KON_PKI_DIR}/ca.crt"
+  cert_file = "${KON_PKI_DIR}/${cert_bundle}.crt"
+  key_file = "${KON_PKI_DIR}/${cert_bundle}.key"
 } 
 EOF
 }
 
 nomad::dev_template() {
-  cat <<EOF > "$1"
+    cert_bundle=$(pki::generate_name "consul" "$(common::ip_addr)")
+    cat <<EOF > "$1"
 bind_addr = "0.0.0.0"
 data_dir = "/var/lib/nomad"
 advertise {
- http = "${2}"
+ http = "127.0.0.1"
  rpc  = "${2}"
  serf = "${2}"
 }
@@ -255,6 +272,13 @@ client {
 }
 server { 
  enabled = true  
+}
+tls {
+  http = false
+  rpc  = true
+  ca_file = "${KON_PKI_DIR}/ca.crt"
+  cert_file = "${KON_PKI_DIR}/${cert_bundle}.crt"
+  key_file = "${KON_PKI_DIR}/${cert_bundle}.key"
 }
 EOF
 }

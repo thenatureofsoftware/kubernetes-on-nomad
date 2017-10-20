@@ -7,6 +7,7 @@ test_name="test::nomad::"
 test::nomad::client_config () {
     source $SCRIPTDIR/common.sh
     source $SCRIPTDIR/config.sh
+    source $SCRIPTDIR/pki.sh
     source $SCRIPTDIR/nomad.sh
 
     ETCD_INITIAL_CLUSTER=node1=http://192.168.0.101:2380,node2=http://192.168.0.102:2380
@@ -36,6 +37,7 @@ test::nomad::servers_config () {
 
     # No argument, should fail
     out="$(nomad::servers_config)"
+    
     assert "servers_config" "${out:28}" "KON_SERVERS is not set, is KON_CONFIG loaded?"
 
     NO_LOG=true
