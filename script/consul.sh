@@ -45,7 +45,7 @@ consul::enable-consul-dns () {
         info "creating symlink /etc/resolv.conf -> /etc/kon/resolv.conf"
         cat <<EOF > /etc/kon/resolv.conf
 #Using Consul as ns
-nameserver 127.0.0.1    
+nameserver $(common::ip_addr)    
 EOF
         # Used to restore DNS config
         printf "%s" "$(readlink /etc/resolv.conf)" > $KON_INSTALL_DIR/resolv_conf_org
@@ -169,7 +169,6 @@ consul::start_dev () {
     -e 'CONSUL_CLIENT_INTERFACE=lo' \
     -e "CONSUL_BIND_INTERFACE=$CONSUL_BIND_INTERFACE" \
     consul:$CONSUL_VERSION agent -dev \
-    -dns-port=53 \
     -recursor=$kon_nameserver \
     -datacenter=$(config::get_dc) \
     -encrypt=$KON_CONSUL_ENCRYPTION_KEY
@@ -268,15 +267,23 @@ consul::is_running () {
 }
 
 consul::write_tls_config () {
+    ip_addr=$(common::ip_addr)
+    cert_bundle=$(pki::generate_name "consul" "$ip_addr")
     mkdir -p $KON_CONSUL_CONFIG_DIR
     cat << EOF > $KON_CONSUL_CONFIG_TLS
 {
   "verify_server_hostname": true,
   "verify_incoming": true,
   "verify_outgoing": true,
-  "key_file": "/etc/kon/pki/consul.key",
-  "cert_file": "/etc/kon/pki/consul.crt",
-  "ca_file": "/etc/kon/pki/ca.crt"
+  "key_file": "/etc/kon/pki/${cert_bundle}.key",
+  "cert_file": "/etc/kon/pki/${cert_bundle}.crt",
+  "ca_file": "/etc/kon/pki/ca.crt",
+  "addresses": {
+    "dns": "${ip_addr} 127.0.0.1"
+  },
+  "ports": {
+    "dns": 53
+  }
 }
 EOF
 }

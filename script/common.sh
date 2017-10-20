@@ -28,7 +28,7 @@ error () {
 ###############################################################################
 fail () {
     error "$1"
-    if [ ! "$_test_" ]; then exit 1; fi
+    if [ -z "$_test_" ]; then exit 1; fi
 }
 
 common::log () {
@@ -39,7 +39,7 @@ common::log () {
     if [ $# -lt 2 ]; then
         printf "["`$DATE`" Info] $1\n" | awk '{$1=$1};1' | tee -a "$(common::logfile)"
     else
-        MSG="$2 $3 $4 $5 $6 $7 $8 $9"
+        MSG=$(echo "$2 $3 $4 $5 $6 $7 $8 $9" | sed 's/[[:space:]]*$//')
         printf "["`$DATE`" $1] $MSG\n" | awk '{$1=$1};1' | tee -a "$(common::logfile)"
     fi
 }
@@ -153,7 +153,11 @@ common::rm_all_running_containers () {
 }
 
 common::ip_addr () {
-    printf "%s" "$(ip addr show $KON_BIND_INTERFACE | grep "inet\b" | awk '{print $2}' | cut -d/ -f1)"
+    if [ "$_test_" ]; then
+        echo "192.168.100.101"
+    else
+        printf "%s" "$(ip addr show $KON_BIND_INTERFACE | grep "inet\b" | awk '{print $2}' | cut -d/ -f1)"
+    fi
 }
 
 common::is_bootstrap_server () {

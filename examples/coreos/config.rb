@@ -67,7 +67,7 @@ end
 #$vm_gui = false
 $vm_memory = 2048
 $vm_cpus = 2
-#$vb_cpuexecutioncap = 100
+$vb_cpuexecutioncap = 50
 
 # Share additional folders to the CoreOS VMs
 # For example,

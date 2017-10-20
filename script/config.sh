@@ -359,8 +359,8 @@ KON_MINIONS=swe:east:node1:192.168.100.101,swe:east:node2:192.168.100.102
 # kube-apiserver advertise address
 ###############################################################################
 KUBE_APISERVER_PORT=6443
-KUBE_APISERVER_EXTRA_SANS=kubernetes.service.dc1.consul,kubernetes.service.dc1,kubernetes.service
-KUBE_APISERVER_ADDRESS=https://kubernetes.service.east.consul:6443
+KUBE_APISERVER_EXTRA_SANS=kubernetes.service.consul
+KUBE_APISERVER_ADDRESS=https://kubernetes.service.consul:6443
 
 # Weave
 #POD_CLUSTER_CIDR=10.32.0.0/16
