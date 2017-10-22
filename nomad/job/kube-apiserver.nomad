@@ -23,9 +23,9 @@ ETCD_SERVERS={{key "etcd/servers"}}
 EOH
       }
       template {
-        destination = "local/kubernetes/pki/ca.crt"
+        destination = "local/kon/pki/ca.crt"
         data      = <<EOF
-{{key "kubernetes/certs/ca/cert"}}
+{{key "kon/pki/ca/cert"}}
 EOF
       }
       template {
@@ -99,10 +99,13 @@ EOF
           "--experimental-bootstrap-token-auth=true",
           "--service-cluster-ip-range=10.96.0.0/12",
           "--service-account-key-file=local/kubernetes/pki/sa.pub",
-          "--client-ca-file=local/kubernetes/pki/ca.crt",
+          "--client-ca-file=local/kon/pki/ca.crt",
           "--authorization-mode=Node,RBAC",
           "--advertise-address=${attr.unique.network.ip-address}",
-          "--etcd-servers=${ETCD_SERVERS}"
+          "--etcd-cafile=local/kon/pki/ca.crt",
+          "--etcd-certfile=local/kubernetes/pki/apiserver-kubelet-client.crt",
+          "--etcd-keyfile=local/kubernetes/pki/apiserver-kubelet-client.key",
+          "--etcd-servers=https://etcd.service.consul:2379"
         ]
       }
 

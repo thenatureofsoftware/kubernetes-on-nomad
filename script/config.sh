@@ -265,7 +265,7 @@ config::configure () {
       active_config=$KON_CONFIG
   elif [ ! "$(common::which consul)" == "" ] && [ $(docker ps -q -f "name=kon-consul") ] && touch $KON_CONFIG > $(common::dev_null) 2>&1; then
       mkdir -p $KON_INSTALL_DIR
-      consul::get $konConfigKey > $KON_CONFIG 2>&1
+      consul kv get "$konConfigKey" > $KON_CONFIG 2>&1
       if [ $? -eq 0 ]; then
           active_config=$KON_CONFIG
       else
@@ -283,12 +283,23 @@ config::configure () {
 
       if [ -f "$KON_CONFIG" ]; then
           if [ ! "$(common::which consul)" == "" ] && [ $(docker ps -q -f "name=kon-consul") ]; then
-            consul::put_file $konConfig $KON_CONFIG > "$(common::dev_null)" 2>&1
+            consul::put_file $konConfigKey $KON_CONFIG > "$(common::dev_null)" 2>&1
             if [ $? -eq 0 ]; then consul::put $configStateKey $OK; fi
           fi
       fi
       config::nodes
       config::regions
+  fi
+}
+
+###############################################################################
+# When Consul is running, remove all sensitive info from disk.
+###############################################################################
+config::clean_up () {
+  if [ "$(consul::has_key "$konConfigKey")" ]; then
+    rm -f $KON_CONFIG
+    rm -f $K8S_PKI_DIR/*
+    rm -f $KON_PKI_DIR/ca.key
   fi
 }
 
@@ -361,11 +372,6 @@ KON_MINIONS=swe:east:node1:192.168.100.101,swe:east:node2:192.168.100.102
 KUBE_APISERVER_PORT=6443
 KUBE_APISERVER_EXTRA_SANS=kubernetes.service.consul
 KUBE_APISERVER_ADDRESS=https://kubernetes.service.consul:6443
-
-# Weave
-#POD_CLUSTER_CIDR=10.32.0.0/16
-# Flannel
-POD_CLUSTER_CIDR=10.244.0.0/16
 
 ###############################################################################
 # Remove this variable or set it to false when done configuring.

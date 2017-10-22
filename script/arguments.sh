@@ -3,28 +3,10 @@
 help_msg () {
   cat <<EOF
 Alpha Commands:
-  cluster start            Starts all given a kon.conf file.
+  cluster apply            Installs and starts a Nomad cluster given a kon.conf
 
 Setup Commands (high level):
   setup node               Installs and starts all software needed for running Kubernetes on node.
-  setup kubectl            Configures kubectl for accessing the cluster.
-
-Generate Commands:
-  generate init            Generates a sample /etc/kon.conf file
-  generate all             Generates etcd configuration, certificates and kubeconfigs.
-  generate etcd            Reads the etcd configuration and stores it in consul.
-  generate certificates    Generates all certificates and stores them in consul. The command only generates missing certificates and is safe to be run multiple times.
-  generate kubeconfigs     Generates all kubeconfig-files and stores them in consul.
-
-Start Commands:
-  start kubelet
-  start kube-proxy
-  start control-plane
-
-Reset Commands:
-  reset all                Stopps all running jobs and deletes all certificates and configuration.
-  reset etcd               Stopps etcd and deletes all configuration.
-  reset kubernetes         Stopps kubernetes control plane and deletes all certificates and configuration.
 
 Consul Commands:
   consul install           Installs Consul
@@ -35,23 +17,26 @@ Consul Commands:
   consul dns disable       Disables all DNS lookups through Consul and restores the original config
 
 Nomad Commands:
+  nomad env                Environment commands for connecting to nomad.
   nomad install            Installs Nomad
   nomad start              Starts Nomad
   nomad restart            Restarts Nomad
   nomad stop               Stops Nomad
 
 Etcd Commands:
+  etcd config              Configures the etcd cluster.
   etcd start               Starts the etcd cluster.
   etcd stop                Stopps the etcd cluster.
   etcd reset               Stopps etcd and deletes all configuration.
 
 Kubernetes Commands:
-  kubernetes start         Starts all Kubernetes components
   kubernetes install       Installs kubernetes components: kubelet, kubeadm and kubectl
-  kubernetes reset         Stopps kubernetes control plane and deletes all certificates and configuration.
+  kubernetes config        Configures all Kubernetes components
+  kubernetes start         Starts all Kubernetes components
+  kubernetes stop          Stopps all kubernetes components
+  kubernetes reset         Stopps all kubernetes components and deletes all configuration.
 
 Other Commands:
-  addon dns                Installs dns addon.
   view status              Shows kon status.
   update                   Update to the latest version.
 
@@ -62,6 +47,7 @@ EOF
 # ARG_OPTIONAL_SINGLE([config],[c],[Configuration file to use],[])
 # ARG_OPTIONAL_BOOLEAN([debug],[],[Run kon in debug mode (bash -x)],[off])
 # ARG_OPTIONAL_BOOLEAN([quiet],[],[Quiet mode, output less],[off])
+# ARG_OPTIONAL_BOOLEAN([yes],[],[Answers yes to all questions],[off])
 # ARG_OPTIONAL_BOOLEAN([print],[],[A boolean option with long flag (and implicit default: off)])
 # ARG_POSITIONAL_MULTI([command],[Positional arg description],[3],[""],[""])
 # ARG_HELP([KON helps you setup and run Kubernetes On Nomad (KON).\n],[$(help_msg)])
@@ -99,17 +85,19 @@ _arg_command=('' "" "")
 _arg_config=
 _arg_debug=off
 _arg_quiet=off
+_arg_yes=off
 _arg_print=off
 
 print_help ()
 {
   printf "%s\n" "KON helps you setup and run Kubernetes On Nomad (KON).
 		"
-  printf 'Usage: %s [-c|--config <arg>] [--(no-)debug] [--(no-)quiet] [--(no-)print] [-h|--help] [-v|--version] <command-1> [<command-2>] [<command-3>]\n' "$0"
+  printf 'Usage: %s [-c|--config <arg>] [--(no-)debug] [--(no-)quiet] [--(no-)yes] [--(no-)print] [-h|--help] [-v|--version] <command-1> [<command-2>] [<command-3>]\n' "$0"
   printf "\t%s\n" "<command>: Positional arg description (defaults for <command-2> to <command-3> respectively: '""' and '""')"
   printf "\t%s\n" "-c,--config: Configuration file to use (no default)"
   printf "\t%s\n" "--debug,--no-debug: Run kon in debug mode (bash -x) (off by default)"
   printf "\t%s\n" "--quiet,--no-quiet: Quiet mode, output less (off by default)"
+  printf "\t%s\n" "--yes,--no-yes: Answers yes to all questions (off by default)"
   printf "\t%s\n" "--print,--no-print: A boolean option with long flag (and implicit default: off) (off by default)"
   printf "\t%s\n" "-h,--help: Prints help"
   printf "\t%s\n" "-v,--version: Prints version"
@@ -140,6 +128,10 @@ parse_commandline ()
       --no-quiet|--quiet)
         _arg_quiet="on"
         test "${1:0:5}" = "--no-" && _arg_quiet="off"
+        ;;
+      --no-yes|--yes)
+        _arg_yes="on"
+        test "${1:0:5}" = "--no-" && _arg_yes="off"
         ;;
       --no-print|--print)
         _arg_print="on"
@@ -186,6 +178,7 @@ assign_positional_args ()
     eval "${_positional_names[ii]}=\${_positionals[ii]}" || die "Error during argument parsing, possibly an Argbash bug." 1
   done
 }
+
 
 # OTHER STUFF GENERATED BY Argbash
 

@@ -22,15 +22,15 @@ job "kube-controller-manager" {
 EOF
       }
       template {
-        destination = "local/kubernetes/pki/ca.crt"
+        destination = "local/kon/pki/ca.crt"
         data      = <<EOF
-{{key "kubernetes/certs/ca/cert"}}
+{{key "kon/pki/ca/cert"}}
 EOF
       }
       template {
-        destination = "local/kubernetes/pki/ca.key"
+        destination = "local/kon/pki/ca.key"
         data      = <<EOF
-{{key "kubernetes/certs/ca/key"}}
+{{key "kon/pki/ca/key"}}
 EOF
       }
       template {
@@ -39,19 +39,29 @@ EOF
 {{key "kubernetes/certs/sa/key"}}
 EOF
       }
+      template {
+        destination = "local/kube-proxy.env"
+        env         = true
+        data      = <<EOH
+CLUSTER_CIDR={{key "kubernetes/network/pod-network-cidr"}}
+EOH
+      }
 
       config {
         command = "/opt/bin/kube-controller-manager"
         args = [
           "--kubeconfig=local/kubernetes/controller-manager.conf",
-          "--root-ca-file=local/kubernetes/pki/ca.crt",
+          "--root-ca-file=local/kon/pki/ca.crt",
           "--controllers=*,bootstrapsigner,tokencleaner",
           "--service-account-private-key-file=local/kubernetes/pki/sa.key",
-          "--cluster-signing-cert-file=local/kubernetes/pki/ca.crt",
-          "--cluster-signing-key-file=local/kubernetes/pki/ca.key",
+          "--cluster-signing-cert-file=local/kon/pki/ca.crt",
+          "--cluster-signing-key-file=local/kon/pki/ca.key",
           "--address=${NOMAD_IP_controllerMgr}",
           "--leader-elect=true",
-          "--use-service-account-credentials=true"
+          "--use-service-account-credentials=true",
+          "--allocate-node-cidrs=true",
+          "--cluster-cidr=${CLUSTER_CIDR}",
+          "--node-cidr-mask-size=24"
         ]
       }
 

@@ -91,6 +91,22 @@ test::common::is_bootstrap_server () {
     assert "is_bootstrap_server_false" "$(common::is_bootstrap_server)" "false"
 }
 
+test::common::system_info () {
+    source $SCRIPTDIR/common.sh
+    _test_="Linux X86_64"
+    assert "system_info_os" "$(common::system_info|jq -r .os)" "linux"
+    assert "system_info_arch" "$(common::system_info|jq -r .arch)" "amd64"
+
+    _test_="Linux armv8"
+    assert "system_info_os" "$(common::system_info|jq -r .os)" "linux"
+    assert "system_info_arch" "$(common::system_info|jq -r .arch)" "arm64"
+
+    _test_="Darwin X86_64"
+    assert "system_info_os" "$(common::system_info|jq -r .os)" "darwin"
+    assert "system_info_arch" "$(common::system_info|jq -r .arch)" "amd64"
+}
+
+(test::common::system_info)
 (test::common::check_cmd)
 (test::common::logfile)
 (test::common::which)

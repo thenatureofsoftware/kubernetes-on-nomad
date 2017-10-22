@@ -48,7 +48,7 @@ consul::enable-consul-dns () {
 nameserver $(common::ip_addr)    
 EOF
         # Used to restore DNS config
-        printf "%s" "$(readlink /etc/resolv.conf)" > $KON_INSTALL_DIR/resolv_conf_org
+        printf "%s" "$(readlink /etc/resolv.conf)" > $KON_CONFIG_DIR/resolv_conf_org
         
         rm /etc/resolv.conf
         ln -s /etc/kon/resolv.conf /etc/resolv.conf
@@ -59,10 +59,10 @@ EOF
 # Restores the /etc/resolv.conf symbolic link.
 ###############################################################################
 consul::disable-consul-dns () {
-    if [ ! -f "$KON_INSTALL_DIR/resolv_conf_org" ]; then
+    if [ ! -f "$KON_CONFIG_DIR/resolv_conf_org" ]; then
         fail "no resolv.conf target found, can't restore."
     fi
-    org_link_target=$(cat $KON_INSTALL_DIR/resolv_conf_org)
+    org_link_target=$(cat $KON_CONFIG_DIR/resolv_conf_org)
 
     if [ ! -L /etc/resolv.conf ]; then
         fail "/etc/resolv.conf is'nt a symbolik link, can't restore"
@@ -218,13 +218,25 @@ consul::put () {
         value=$2
     fi
     
-    info "$(consul kv put $key $value) value: $value"
+    info "$(consul kv put "$key" "$value") value: $value"
 }
 
-consul::get () {
-    if [ "$1" == "" ]; then fail "invalid first argument, can't be empty"; fi
+###############################################################################
+# Checks if Consul has key.
+# Param #1 key
+# echo "true" if key exists and return 0 else return 1
+###############################################################################
+consul::has_key () {
+    if [ "$1" == "" ]; then return 0; fi
+    
     consul kv get $1 > $(common::dev_null) 2>&1
-    if [ $? -eq 0 ]; then echo "$(consul kv get $1)"; fi
+    if [ $? -eq 0 ]; then
+        echo "true"
+        return 0
+    fi
+}
+consul::get () {
+    if [ "$(consul::has_key $1)" ]; then echo "$(consul kv get $1)"; fi
 }
 
 consul::delete_all () {
@@ -240,9 +252,11 @@ consul::delete () {
 }
 
 consul::fail_if_missing_key () {
-    if [ "$1" == "" ]; then fail "invalid first argument, can't be empty"; fi
-    consul kv get $1 > "$(common::dev_null)" 2>&1
-    if [ "$?" -gt 0 ]; then fail "$2"; fi
+    if [ "$(consul::has_key $1)" ]; then
+        echo "$(consul kv get $1)";
+    else
+        fail "$2"
+    fi
 }
 
 consul::put_file () {

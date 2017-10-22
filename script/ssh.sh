@@ -33,7 +33,7 @@ ssh::copy () {
     (
     cd $KON_PKI_DIR
     rm -f pki.tgz
-    tar zcvf pki.tgz $consul_cert_bundle_name.* $nomad_cert_bundle_name.* ca.crt
+    tar zcf pki.tgz $(config::get_host "$ip_addr").* $consul_cert_bundle_name.* $nomad_cert_bundle_name.* ca.*
     cd -
     )
 
@@ -55,7 +55,7 @@ ssh::install_kon () {
         $(ssh::cmd) << EOF
 sudo /kon-dev/update-all.sh \
 && sudo mkdir -p /etc/kon/pki \
-&& sudo tar zxvf ~/pki.tgz -C /etc/kon/pki/
+&& sudo tar zxf ~/pki.tgz -C /etc/kon/pki/
 EOF
     else
         $(ssh::cmd) << EOF
@@ -63,9 +63,8 @@ sudo mkdir -p /opt/bin \
 && sudo mkdir -p /etc/kon/pki \
 && sudo mv ~/kon /opt/bin \
 && sudo chmod a+x /opt/bin/kon \
-&& sudo mkdir -p /etc/kon \
 && sudo mv ~/kon.conf /etc/kon/ \
-&& sudo tar zxvf ~/pki.tgz -C /etc/kon/pki/
+&& sudo tar zxf ~/pki.tgz -C /etc/kon/pki/
 EOF
     fi
 }
