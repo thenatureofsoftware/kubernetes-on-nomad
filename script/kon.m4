@@ -3,28 +3,10 @@
 help_msg () {
   cat <<EOF
 Alpha Commands:
-  cluster start            Starts all given a kon.conf file.
+  cluster apply            Installs and starts a Nomad cluster given a kon.conf
 
 Setup Commands (high level):
   setup node               Installs and starts all software needed for running Kubernetes on node.
-  setup kubectl            Configures kubectl for accessing the cluster.
-
-Generate Commands:
-  generate init            Generates a sample /etc/kon.conf file
-  generate all             Generates etcd configuration, certificates and kubeconfigs.
-  generate etcd            Reads the etcd configuration and stores it in consul.
-  generate certificates    Generates all certificates and stores them in consul. The command only generates missing certificates and is safe to be run multiple times.
-  generate kubeconfigs     Generates all kubeconfig-files and stores them in consul.
-
-Start Commands:
-  start kubelet
-  start kube-proxy
-  start control-plane
-
-Reset Commands:
-  reset all                Stopps all running jobs and deletes all certificates and configuration.
-  reset etcd               Stopps etcd and deletes all configuration.
-  reset kubernetes         Stopps kubernetes control plane and deletes all certificates and configuration.
 
 Consul Commands:
   consul install           Installs Consul
@@ -35,23 +17,26 @@ Consul Commands:
   consul dns disable       Disables all DNS lookups through Consul and restores the original config
 
 Nomad Commands:
+  nomad env                Environment commands for connecting to nomad.
   nomad install            Installs Nomad
   nomad start              Starts Nomad
   nomad restart            Restarts Nomad
   nomad stop               Stops Nomad
 
 Etcd Commands:
+  etcd config              Configures the etcd cluster.
   etcd start               Starts the etcd cluster.
   etcd stop                Stopps the etcd cluster.
   etcd reset               Stopps etcd and deletes all configuration.
 
 Kubernetes Commands:
-  kubernetes start         Starts all Kubernetes components
   kubernetes install       Installs kubernetes components: kubelet, kubeadm and kubectl
-  kubernetes reset         Stopps kubernetes control plane and deletes all certificates and configuration.
+  kubernetes config        Configures all Kubernetes components
+  kubernetes start         Starts all Kubernetes components
+  kubernetes stop          Stopps all kubernetes components
+  kubernetes reset         Stopps all kubernetes components and deletes all configuration.
 
 Other Commands:
-  addon dns                Installs dns addon.
   view status              Shows kon status.
   update                   Update to the latest version.
 
@@ -64,6 +49,7 @@ exit 11  #)Created by argbash-init v2.5.0
 # ARG_OPTIONAL_SINGLE([config], c, [Configuration file to use], [])
 # ARG_OPTIONAL_BOOLEAN([debug], , [Run kon in debug mode (bash -x)], [off])
 # ARG_OPTIONAL_BOOLEAN([quiet], , [Quiet mode, output less], [off])
+# ARG_OPTIONAL_BOOLEAN([yes], , [Answers yes to all questions], [off])
 # ARG_OPTIONAL_BOOLEAN([print], , [A boolean option with long flag (and implicit default: off)])
 # ARG_POSITIONAL_MULTI([command], [Positional arg description], [3], [""], [""])
 # ARG_HELP([KON helps you setup and run Kubernetes On Nomad (KON).\n], [$(help_msg)])

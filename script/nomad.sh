@@ -1,5 +1,16 @@
 #!/bin/sh
 
+nomad::env () {
+    local ip_addr="$(common::ip_addr)"
+    local hostname="$(config::get_host "$ip_addr")"
+    cat <<EOF
+export NOMAD_ADDR=https://localhost:4646
+export NOMAD_CACERT=$KON_PKI_DIR/ca.crt
+export NOMAD_CLIENT_CERT=$KON_PKI_DIR/$hostname.crt
+export NOMAD_CLIENT_KEY=$KON_PKI_DIR/$hostname.key
+EOF
+}
+
 nomad::install () {
 
     if [ $(common::which nomad) ]; then
@@ -184,8 +195,8 @@ WantedBy=multi-user.target
 EOF
 }
 
-nomad::client_template() {
-    cert_bundle=$(pki::generate_name "consul" "$(common::ip_addr)")
+nomad::client_template () {
+    cert_bundle=$(pki::generate_name "nomad" "$(common::ip_addr)")
     cat <<EOF > "$1"
 bind_addr = "0.0.0.0"
 data_dir = "/var/lib/nomad"
@@ -212,17 +223,19 @@ consul {
   address = "127.0.0.1:8500"
 }
 tls {
-  http = false
+  http = true
   rpc  = true
   ca_file = "${KON_PKI_DIR}/ca.crt"
   cert_file = "${KON_PKI_DIR}/${cert_bundle}.crt"
   key_file = "${KON_PKI_DIR}/${cert_bundle}.key"
+  verify_server_hostname = false
+  verify_https_client    = false
 }
 EOF
 }
 
 nomad::server_template() {
-    cert_bundle=$(pki::generate_name "consul" "$(common::ip_addr)")
+    cert_bundle=$(pki::generate_name "nomad" "$(common::ip_addr)")
     cat <<EOF > $1
 bind_addr = "0.0.0.0"
 data_dir = "/var/lib/nomad"
@@ -239,17 +252,19 @@ consul {
   address = "127.0.0.1:8500"
 }
 tls {
-  http = false
+  http = true
   rpc  = true
   ca_file = "${KON_PKI_DIR}/ca.crt"
   cert_file = "${KON_PKI_DIR}/${cert_bundle}.crt"
   key_file = "${KON_PKI_DIR}/${cert_bundle}.key"
+  verify_server_hostname = false
+  verify_https_client    = false
 } 
 EOF
 }
 
 nomad::dev_template() {
-    cert_bundle=$(pki::generate_name "consul" "$(common::ip_addr)")
+    cert_bundle=$(pki::generate_name "nomad" "$(common::ip_addr)")
     cat <<EOF > "$1"
 bind_addr = "0.0.0.0"
 data_dir = "/var/lib/nomad"
@@ -274,11 +289,13 @@ server {
  enabled = true  
 }
 tls {
-  http = false
+  http = true
   rpc  = true
   ca_file = "${KON_PKI_DIR}/ca.crt"
   cert_file = "${KON_PKI_DIR}/${cert_bundle}.crt"
   key_file = "${KON_PKI_DIR}/${cert_bundle}.key"
+  verify_server_hostname = false
+  verify_https_client    = false
 }
 EOF
 }

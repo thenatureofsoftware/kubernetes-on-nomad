@@ -13,8 +13,7 @@ job "kube-proxy" {
         destination = "local/kube-proxy.env"
         env         = true
         data      = <<EOH
-POD_CLUSTER_CIDR={{key "kubernetes/kube-proxy/cluster-cidr"}}
-KUBE_APISERVER_ADDRESS={{key "kubernetes/kube-proxy/master"}}
+CLUSTER_CIDR={{key "kubernetes/network/pod-network-cidr"}}
 EOH
       }
 
@@ -39,8 +38,7 @@ EOF
         command = "kube-proxy"
         args = [
           "--kubeconfig=/etc/kubernetes/kubeconfig.conf",
-          "--cluster-cidr=${POD_CLUSTER_CIDR}",
-          "--master=${KUBE_APISERVER_ADDRESS}"
+          "--cluster-cidr=${CLUSTER_CIDR}"
         ]
       }
 

@@ -5,7 +5,8 @@ You need Vagrant installed and it's only been tested on VirtulaBox.
 
 The example uses the new `cluster` command.
 
-You need `bash >= 4` to run `kon`. If you're on OSX you can install a newer version of `bash` using [Homebrew](https://brew.sh/) and `brew install bash`.
+You need `bash >= 4` to run `kon`. If you're on OSX you can install a newer version of
+`bash` using [Homebrew](https://brew.sh/) and `brew install bash`.
 
 First you need to clone the project:
 ```
@@ -53,10 +54,10 @@ Make sure your in the right spot and use `kon` to start the cluster:
 ```
 $ pwd
 .../kubernetes-on-nomad/examples/coreos
-$ bash ../../kon.sh --config ./kon.conf cluster start 
+$ bash ../../kon.sh --config ./kon.conf cluster apply 
 ```
 
-When the `cluster start`-command is done, login on any node and check the state.
+When the `cluster apply`-command is done, login on any node and check the state.
 
 First login:
 ```
@@ -66,13 +67,14 @@ core@core-03 ~ $ sudo -u root -i
 ```
 and check the cluster state using the `view state`-command:
 ```
+core-03 ~ # eval $(kon --quiet nomad env)
 core-03 ~ # kon --quiet view state
 Components                              State
 -----------------------                 ----------
 certificates                            
 config                                  OK
 consul                                  Running
-etcd                                    
+etcd                                    NotConfigured
 kube-apiserver                          
 kube-controller-manager                 
 kube-proxy                              
@@ -89,7 +91,11 @@ core-03 ~ # dig +short nomad.service.east.consul
 172.17.8.101
 ``` 
 
-We now have a Nomad cluster with Consul. Now it's time to setup Kubernetes.
+We now have a Nomad cluster with Consul. First we need to configure and start
+`etcd` before we can start Kubernetes:
+```
+core-03 ~ # kon -yes etcd config && kon etcd start
+```
 
 Let's start with generating all certificates and configuration using the `generate all`-command, then view the state again:
 ```

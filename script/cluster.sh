@@ -4,7 +4,7 @@
 # Variables
 ###############################################################################
 
-cluster::start () {
+cluster::apply () {
 
     KON_PKI_DIR=$PWD/.pki
 
@@ -17,9 +17,10 @@ cluster::start () {
     pki::generate_ca
 
     for node in ${!config_nodes[@]}
-    do        
-        pki::generate_consul_cert $node $cn
-        pki::generate_nomad_cert $node $cn
+    do  
+        pki::generate_client_cert $node      
+        pki::generate_consul_cert $node
+        pki::generate_nomad_cert $node
 
         KON_SSH_HOST="$(config::get_host $node)"
         if [ "$KON_SSH_HOST" == "" ]; then

@@ -15,7 +15,7 @@ test::cluster::start () {
 
     active_config=$(common::dev_null)
 
-    assert "start" "$(cluster::start)" ""
+    assert "start" "$(cluster::apply)" ""
 }
 
 (test::cluster::start)

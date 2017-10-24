@@ -4,6 +4,7 @@ BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Installation directory for all scripts.
 KON_INSTALL_DIR=${KON_INSTALL_DIR:=/opt/kon}
+KON_BIN_DIR=${KON_BIN_DIR:=$KON_INSTALL_DIR/bin}
 
 # Configuration directory
 KON_CONFIG_DIR=${KON_CONFIG_DIR:=/etc/kon}
@@ -19,6 +20,7 @@ KON_CONFIG=$KON_CONFIG_DIR/kon.conf
 KON_LOG_FILE=${KON_LOG_FILE:=/var/log/kon.log}
 K8S_CONFIGDIR=${K8S_CONFIGDIR:=/etc/kubernetes}
 K8S_PKI_DIR=${K8S_PKI_DIR:=$K8S_CONFIGDIR/pki}
+KON_POD_NETWORK=${KON_POD_NETWORK:=weave}
 
 # Consul
 CONSUL_VERSION=${CONSUL_VERSION:=1.0.0}
@@ -36,6 +38,8 @@ ETCD_SERVERS=${ETCD_SERVERS:=""}
 
 konKey="kon"
 konConfigKey="$konKey/config"
+konPkiKey=$konKey/pki
+konPkiCAKey=$konPkiKey/ca
 
 # If state is a nomad job, then the last part should always be
 # the name of the job.
@@ -53,6 +57,8 @@ controllerMgrStateKey="$stateKey/kube-controller-manager"
 kubernetesStateKey="$stateKey/kubernetes"
 
 kubernetesKey="kubernetes"
+kubernetesNetworkKey="$kubernetesKey/network"
+kubernetesPodNetworkCidrKey="$kubernetesNetworkKey/pod-network-cidr"
 minionKey="$kubernetesKey/minion"
 controllerMgrKubeconfigKey="$kubernetesKey/controller-manager/kubeconfig"
 schedulerKubeconfigKey="$kubernetesKey/scheduler/kubeconfig"
@@ -61,17 +67,18 @@ minionsKey="$kubernetesKey/minions"
 certsKey="$kubernetesKey/certs"
 kubeProxyKey="$kubernetesKey/kube-proxy"
 kubeProxyClusterCidrKey="$kubeProxyKey/cluster-cidr"
-kubeProxyMasterKey="$kubeProxyKey/master"
 
 etcdKey="etcd"
 etcdServersKey="$etcdKey/servers"
 etcdInitialClusterKey="$etcdKey/initial-cluster"
 etcdInitialClusterTokenKey="$etcdKey/initial-cluster-token"
+etcdServiceKey="$etcdKey/service"
 
 STOPPED="Stopped"
 STARTED="Started"
 RUNNING="Running"
 CONFIGURED="Configured"
+NOT_CONFIGURED="NotConfigured"
 OK="OK"
 
 ###############################################################################
@@ -79,10 +86,12 @@ OK="OK"
 ###############################################################################
 source $SCRIPTDIR/arguments.sh
 source $SCRIPTDIR/common.sh
+source $SCRIPTDIR/common_install.sh
 source $SCRIPTDIR/config.sh
 source $SCRIPTDIR/pki.sh
 source $SCRIPTDIR/consul.sh
 source $SCRIPTDIR/nomad.sh
+source $SCRIPTDIR/etcd.sh
 source $SCRIPTDIR/kubernetes.sh
 source $SCRIPTDIR/ssh.sh
 source $SCRIPTDIR/cluster.sh
@@ -105,179 +114,6 @@ kon::install_script () {
 
     chmod a+x $TARGET/script/*.sh
     chmod a+x $TARGET/kon.sh
-}
-
-###############################################################################
-# Generates certificates and stores them in consul
-###############################################################################
-kon::generate_certificates () {
-    if [ ! "$(common::which kubeadm)" ]; then fail "kubeadm not installed, please install it first (kon kubernetes install)"; fi
-    info "cleaning up any certificates in $K8S_PKI_DIR"
-    if [ -d "$K8S_PKI_DIR" ]; then
-        rm -rf $K8S_PKI_DIR/*
-    else
-        mkdir -p $K8S_PKI_DIR
-    fi
-
-    # Get any existing certificates from Consul
-    kon::get_cert_and_key "ca"
-    kon::get_cert_and_key "apiserver"
-    kon::get_cert_and_key "apiserver-kubelet-client"
-    kon::get_cert_and_key "front-proxy-ca"
-    kon::get_cert_and_key "front-proxy-client"
-    kon::get_cert_and_key "sa"
-
-    # Call kubeadm to generate any missing certificates
-    info "\n$(kubeadm alpha phase certs all --apiserver-advertise-address=$KUBE_APISERVER --apiserver-cert-extra-sans=$KUBE_APISERVER_EXTRA_SANS)"
-    
-    # Put all certificates back in Consul
-    kon::put_cert_and_key "ca"
-    kon::put_cert_and_key "apiserver"
-    kon::put_cert_and_key "apiserver-kubelet-client"
-    kon::put_cert_and_key "front-proxy-ca"
-    kon::put_cert_and_key "front-proxy-client"
-    kon::put_cert_and_key "sa"
-
-    consul::put $certificateStateKey $OK
-}
-
-###############################################################################
-# Generates kubeconfig files.
-###############################################################################
-kon::generate_kubeconfigs () {
-        
-    for minion in ${!config_minions[@]}; do
-        minion_name=${config_minions[$minion]}
-        minion_ip=$minion
-        kon::generate_kubeconfig "$minion_name" "$minion_ip"
-    done
-
-    # kubeconfig for controller-manager
-    info "$(kubeadm alpha phase kubeconfig controller-manager --cert-dir=$K8S_PKI_DIR --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
-    common::fail_on_error "failed to generate kubeconfig for controller-manager"
-    info "$(kubectl --kubeconfig=$K8S_CONFIGDIR/controller-manager.conf config set-cluster kubernetes --server=$KUBE_APISERVER_ADDRESS)"
-    common::fail_on_error "failed to update apiserver address in kubeconfig for controller-manager"
-    info "kubeconfig for controller-manager\n$(kubectl --kubeconfig=$K8S_CONFIGDIR/controller-manager.conf config view)"
-    info "\n$(consul::put_file $controllerMgrKubeconfigKey $K8S_CONFIGDIR/controller-manager.conf)"
-
-    # kubeconfig for scheduler
-    info "$(kubeadm alpha phase kubeconfig scheduler --cert-dir=$K8S_PKI_DIR --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
-    common::fail_on_error "failed to generate kubeconfig for scheduler"
-    info "$(kubectl --kubeconfig=$K8S_CONFIGDIR/scheduler.conf config set-cluster kubernetes --server=$KUBE_APISERVER_ADDRESS)"
-    common::fail_on_error "failed to update apiserver address in kubeconfig for scheduler"
-    info "kubeconfig for scheduler\n$(kubectl --kubeconfig=$K8S_CONFIGDIR/scheduler.conf config view)"
-    info "\n$(consul::put_file $schedulerKubeconfigKey $K8S_CONFIGDIR/scheduler.conf)"
-
-    # kubeconfig for admin
-    info "$(kubeadm alpha phase kubeconfig admin --cert-dir=$K8S_PKI_DIR --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
-    common::fail_on_error "failed to generate kubeconfig for admin"
-    info "$(kubectl --kubeconfig=$K8S_CONFIGDIR/admin.conf config set-cluster kubernetes --server=$KUBE_APISERVER_ADDRESS)"
-    common::fail_on_error "failed to update apiserver address in kubeconfig for admin"
-    info "kubeconfig for admin\n$(kubectl --kubeconfig=$K8S_CONFIGDIR/admin.conf config view)"
-    info "\n$(consul::put_file $adminKubeconfigKey $K8S_CONFIGDIR/admin.conf)"
-
-    consul::put $kubeconfigStateKey $OK
-}
-
-###############################################################################
-# Generates kubeconfig file for each node (minion).
-###############################################################################
-kon::generate_kubeconfig () {
-    info "generating kubeconfig for minion: $1 with ip: $2"
-    rm $K8S_CONFIGDIR/kubelet.conf > /dev/null 2>&1
-    info "$(kubeadm alpha phase kubeconfig kubelet \
-    --cert-dir=$K8S_PKI_DIR --node-name=$1 --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
-    common::fail_on_error "failed to generate kubeconfig for minion: $1 with ip: $2"
-    info "$(kubectl --kubeconfig=/etc/kubernetes/kubelet.conf config set-cluster kubernetes --server=$KUBE_APISERVER_ADDRESS)"
-    common::fail_on_error "failed to update apiserver address in kubeconfig for minion: $1 with ip: $2"
-    info "kubeconfig for $1:\n$(kubectl --kubeconfig=$K8S_CONFIGDIR/kubelet.conf config view)"
-    info "\n$(consul::put_file $minionsKey/$1/kubeconfig $K8S_CONFIGDIR/kubelet.conf)"
-    info "\n$(consul::put $minionsKey/minions/$1/ip $2)"
-}
-
-###############################################################################
-# Stores key and cert in consul given a key and cert pair name.
-###############################################################################
-kon::put_cert_and_key() {
-    info "Storing key and cert for $1"
-    consul::put_file $certsKey/$1/key $K8S_PKI_DIR/$1.key
-    if [ "$1" == "sa" ]; then
-        consul::put_file $certsKey/$1/cert $K8S_PKI_DIR/$1.pub
-    else
-        consul::put_file $certsKey/$1/cert $K8S_PKI_DIR/$1.crt
-    fi
-}
-
-###############################################################################
-# Fetches any existing cert and key from consul.
-###############################################################################
-kon::get_cert_and_key() {
-    consul kv get $certsKey/$1/key > /dev/null 2>&1
-    if [ $? -eq 0 ]; then
-        info "Found key and cert pair for $certsKey/$1"
-        consul kv get $certsKey/$1/key > $K8S_PKI_DIR/$1.key
-        if [ "$1" == "sa" ]; then
-            consul kv get $certsKey/$1/cert > $K8S_PKI_DIR/$1.pub
-        else
-            consul kv get $certsKey/$1/cert > $K8S_PKI_DIR/$1.crt
-        fi
-    fi
-}
-
-###############################################################################
-# Stopps and removes etcd.
-###############################################################################
-kon::reset_etcd () {
-    nomad::stop_job "etcd"
-    consul::delete_all $etcdKey
-}
-
-###############################################################################
-# Validates etcd configuration and puts it in Consul.
-###############################################################################
-kon::load_etcd_config () {
-    
-    if [ "$ETCD_SERVERS" == "" ]; then
-        error "ETCD_SERVERS is not set"
-        exit 1
-    fi
-
-    if [ "$ETCD_INITIAL_CLUSTER" == "" ]; then
-        error "ETCD_INITIAL_CLUSTER is not set"
-        exit 1
-    fi
-
-    if [ "$ETCD_INITIAL_CLUSTER_TOKEN" == "" ]; then
-        error "ETCD_INITIAL_CLUSTER_TOKEN is not set"
-        exit 1
-    fi
-
-    # Put etcd configuration in Consul.
-    consul::put $etcdServersKey "$ETCD_SERVERS"
-    consul::put $etcdInitialClusterKey "$ETCD_INITIAL_CLUSTER"
-    consul::put $etcdInitialClusterTokenKey "$ETCD_INITIAL_CLUSTER_TOKEN"
-
-    currentState=$(consul::get $etcdStateKey)
-    if [ ! "$currentState" == $STARTED ] && [ ! "$currentState" == $RUNNING ]; then
-        consul::put $etcdStateKey $CONFIGURED
-    fi
-}
-
-kon::load_kube_proxy_config () {
-    if [ "$POD_CLUSTER_CIDR" == "" ]; then
-        error "POD_CLUSTER_CIDR is not set"
-        exit 1
-    fi
-
-    if [ "$KUBE_APISERVER_ADDRESS" == "" ]; then
-        error "KUBE_APISERVER_ADDRESS is not set"
-        exit 1
-    fi
-
-    consul::put $kubeProxyClusterCidrKey "$POD_CLUSTER_CIDR"
-    consul::put $kubeProxyMasterKey "$KUBE_APISERVER_ADDRESS"
-
-    consul::put $kubeProxyStateKey $OK
 }
 
 ###############################################################################
@@ -306,15 +142,17 @@ setup-node () {
         consul-start
         info "consul started"
     fi
+    pki::setup_node_certificates
     nomad::install
     nomad::start
     kubernetes::install
+
 }
 
 ###############################################################################
 # Generates sample configuration file.
 ###############################################################################
-generate-config () {
+config-init () {
     if [ -f "$KON_CONFIG" ]; then
         fail "$KON_CONFIG already exists"
     fi
@@ -322,191 +160,94 @@ generate-config () {
     info "you can now configure Kubernetes-On-Nomad by editing $KON_CONFIG"
 }
 
-###############################################################################
-# Generates all kubernetes certificates.
-###############################################################################
-generate-certificates () {
-    kon::generate_certificates
-    common::fail_on_error "generating certificates failed"
+all-config () {
+    etcd::config
+    kubernetes::config
+}
+
+all-reset () {
+    kubernetes::reset
+    etcd::reset
+}
+
+
+all-start () {
+  etcd::start
+  sleep 5
+  kubernetes::start-control-plane
+  sleep 5
+  kubernetes::start-kubelet
+  kubernetes::start-kube-proxy
 }
 
 ###############################################################################
-# Generates all kubeconfigs.
+# Configures etcd 
 ###############################################################################
-generate-kubeconfigs () {
+etcd-config () {
+    # switch log of
+    NO_LOG=true
     
-    if [ ! "$(consul::get $certificateStateKey)" == "generated" ]; then fail "certificates must be generated first"; fi
+    kubernetes-stop
 
-    # Verify and put configuration in Consul.
-    kon::load_kube_proxy_config
+    etcd-stop
 
-    # Generate kubeconfigs.
-    kon::generate_kubeconfigs
-    common::fail_on_error "generating kubeconfigs failed"
+    # switch log on
+    unset NO_LOG
+
+    etcd::config
 }
 
 ###############################################################################
-# Puts etcd configuration in Consul.
-# The name doesn't reflect what we're doing, but makes sense from a user
-# perspective.
+# Stopps and removes etcd.
 ###############################################################################
-generate-etcd () {
-    kon::load_etcd_config
-}
-
-generate-all () {
-    kon::load_etcd_config
-    kon::generate_certificates
-    kon::generate_kubeconfigs
-    kon::load_kube_proxy_config
-}
-
-reset-all () {
-    kubernetes-reset
-    kon::reset_etcd
-}
-
-reset-etcd () {
-    kon::reset_etcd
-}
-
-start-all () {
-  start-etcd
-  sleep 5
-  start-kubelet
-  sleep 5
-  start-kube-proxy
-  sleep 5
-  start-control-plane
+etcd-reset () {
+    etcd::reset
 }
 
 ###############################################################################
 # Starts etcd 
 ###############################################################################
 etcd-start () {
-
-    for key in  $etcdServersKey $etcdInitialClusterKey $etcdInitialClusterTokenKey; do
-        consul::fail_if_missing_key $key "$key is missing, generate etcd konfiguration first (generate etcd)"
-    done
-    
-    info "starting etcd ..."
-    nomad::run_job "etcd"
-    info "etcd started"
+    etcd::start
 }
 
 ###############################################################################
 # Stops etcd 
 ###############################################################################
 etcd-stop () {
-    info "stopping etcd ..."
-    nomad::stop_job "etcd"
-    info "etcd stopped"
-}
-
-###############################################################################
-# Starts kubelet 
-###############################################################################
-start-kubelet () {
-    info "starting kubelet ..."
-    nomad::run_job "kubelet"
-    info "kubelet started"
-}
-
-###############################################################################
-# Stop kubelet 
-###############################################################################
-stop-kubelet () {
-    info "stopping kubelet ..."
-    nomad::stop_job "kubelet"
-    info "kubelet stopped"
-}
-
-###############################################################################
-# Starts kube-proxy 
-###############################################################################
-start-kube-proxy () {
-    info "starting kube-proxy ..."
-    nomad::run_job "kube-proxy"
-    info "kube-proxy started"
-}
-
-###############################################################################
-# Stop kube-proxy 
-###############################################################################
-stop-kube-proxy () {
-    info "stopping kube-proxy ..."
-    nomad::stop_job "kube-proxy"
-    info "kube-proxy stopped"
-}
-
-###############################################################################
-# Starts the Kubernetes control plane 
-###############################################################################
-start-control-plane () {
-    info "starting kubernetes control plane ..."
-    for comp in kube-apiserver kube-scheduler kube-controller-manager; do
-        nomad::run_job $comp
-    done
-    info "kubernetes control plane started"
-}
-
-###############################################################################
-# Stops the Kubernetes control plane 
-###############################################################################
-stop-control-plane () {
-    info "stopping kubernetes control plane ..."
-    for comp in kube-apiserver kube-scheduler kube-controller-manager; do
-        nomad::stop_job $comp
-    done
-    info "kubernetes control plane stopped"
-}
-
-addon-dns () {
-    WORKDIR=/tmp/.kon 
-    mkdir -p $WORKDIR
-    KUBE_CONFIG=$WORKDIR/kubeconfig.conf
-    consul kv get kubernetes/admin/kubeconfig > $WORKDIR/kubeconfig.conf
-    kubeadm alpha phase addon kube-dns --kubeconfig=$KUBE_CONFIG  --kubernetes-version=$K8S_VERSION
-}
-
-setup-kubectl () {
-    mkdir -p ~/.kube
-    consul kv get kubernetes/admin/kubeconfig > ~/.kube/config
-    if [ $? -eq 0 ]; then
-        info "successfully configured kubectl"
-    else
-        error "failed to configure kubectl"
-    fi
+    etcd::stop
 }
 
 kubernetes-install () {
     kubernetes::install
 }
 
+kubernetes-config () {
+    kubernetes::config
+}
+
 kubernetes-reset () {
-    kubernetes-stop
+    kubernetes::stop
     consul::delete_all $kubernetesKey
-    consul::put $certificateStateKey ""
-    consul::put $kubeconfigStateKey ""
+    consul::put $certificateStateKey "$NOT_CONFIGURED"
+    consul::put $kubeconfigStateKey "$NOT_CONFIGURED"
     rm -rf $K8S_PKI_DIR/*
     rm -rf $K8S_CONFIGDIR/*.*
 }
 
 kubernetes-start () {
-    if [ ! "$(consul::get $certificateStateKey)" == $OK ]; then fail "certificates missing"; fi
-    if [ ! "$(consul::get $kubeconfigStateKey)" == $OK ]; then fail "kubeconfig missing"; fi
-    if [ ! "$(consul::get $etcdStateKey)" == "$STARTED" ] && [ ! "$(consul::get $etcdStateKey)" == "$RUNNIG" ]; then fail "etcd is not started"; fi
-    start-control-plane
-    start-kubelet
-    start-kube-proxy
-    consul::put $kubernetesStateKey $STARTED
+    kubernetes::start
 }
 
 kubernetes-stop () {
-    stop-control-plane
-    stop-kubelet
-    stop-kube-proxy
-    consul::put "kon/state/kubernetes" $STOPPED
+    kubernetes::stop
+}
+
+###############################################################################
+# Environment commands for connecting to nomad.
+###############################################################################
+nomad-env () {
+    nomad::env
 }
 
 ###############################################################################
@@ -638,9 +379,12 @@ consul-dns-disable () {
    consul::disable-consul-dns
 }
 
-cluster-start () {
+###############################################################################
+# Applies kon.conf on all nodes and brings Nomad and Consul up and running
+###############################################################################
+cluster-apply () {
     info "experimental command that starts the whole cluster"
-    cluster::start
+    cluster::apply
 }
 
 ###############################################################################
@@ -650,7 +394,7 @@ view-state () {
     # Default view
     declare -A konStates
     konStates=(
-                [etcd]="" \
+                [etcd]="$NOT_CONFIGURED" \
                 [consul]="" \
                 [config]="" \
                 [nomad]="" \
@@ -672,23 +416,19 @@ view-state () {
             konStates[$(echo $item | awk -F '[/:]' '{print $3}')]="$(echo $item | awk -F '[/:]' '{print $4}')"
         done
 
-        # For each datacenter, check if it has any components running.
-        for dc in "$(consul catalog datacenters)"; do
+        if [ "$(dig +short "etcd.service.consul")" ]; then konStates[etcd]=$RUNNING; fi
+        if [ "$(dig +short "controller-manager.service.consul")" ]; then konStates[kube-controller-manager]=$RUNNING; fi
+        if [ "$(dig +short "scheduler.service.consul")" ]; then konStates[kube-scheduler]=$RUNNING; fi
+        if [ "$(dig +short "kubernetes.service.consul")" ]; then
+            # Kubernetes is running, now fetch the state of all minions.
+            konStates[kubernetes]=$RUNNING
+            konStates[kube-apiserver]=$RUNNING
 
-            if [ "$(dig +short "etcd.service.$dc.consul")" ]; then konStates[etcd]=$RUNNING; fi
-            if [ "$(dig +short "controller-manager.service.$dc.consul")" ]; then konStates[kube-controller-manager]=$RUNNING; fi
-            if [ "$(dig +short "scheduler.service.$dc.consul")" ]; then konStates[kube-scheduler]=$RUNNING; fi
-            if [ "$(dig +short "kubernetes.service.$dc.consul")" ]; then
-        
-                # Kubernetes is running, now fetch the state of all minions.
-                konStates[kubernetes]=$RUNNING
-                konStates[kube-apiserver]=$RUNNING
-                minions=$(kubectl get nodes -o json)
-                for minion in $(echo $minions|jq '.items[].status.addresses[]|select(.type == "Hostname").address'|sed 's/"//g'); do
-                    konStates[$minionKey/$minion]="$(kubectl get nodes -l "kubernetes.io/hostname=$minion" | sed '2q;d' | awk '{print $2}')"
-                done
-            fi
-        done
+            minions=$(kubectl get nodes -o json)
+            for minion in $(echo $minions|jq '.items[].status.addresses[]|select(.type == "Hostname").address'|sed 's/"//g'); do
+                konStates[$minionKey/$minion]="$(kubectl get nodes -l "kubernetes.io/hostname=$minion" | sed '2q;d' | awk '{print $2}')"
+            done
+        fi
     fi
 
     # If Nomad is running, check job status for kubelet and proxy
@@ -737,9 +477,11 @@ view-state () {
 ###############################################################################
 update () {
     info "updating ..."
+    common::check_root
 
     # Remove old version
-    rm -rf $BASEDIR *
+    rm -rf $KON_INSTALL_DIR
+    docker rmi $(docker images -q thenatureofsoftware/kon) > $(common::dev_null) 2>&1
 
     # Trigger install of new version
     (KON_VERSION=latest kon --version > $(common::dev_null) 2>&1)
@@ -749,7 +491,7 @@ update () {
 
 # Move to stage 1 init funcion
 #common::check_root
-common::mk_bindir
+#common::mk_bindir
 
 if [ "$1" == "install_script" ]; then
     kon::install_script
@@ -803,6 +545,7 @@ touch $KON_LOG_FILE > $(common::dev_null) 2>&1 || KON_LOG_FILE=$(common::dev_nul
 # Load configuration
 ###############################################################################
 config::configure
+trap config::clean_up EXIT
 
 ###############################################################################
 # Execute command                                                             #

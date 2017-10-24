@@ -23,9 +23,9 @@ EOF
       }
 
       template {
-        destination = "local/kubernetes/pki/ca.crt"
+        destination = "local/kon/pki/ca.crt"
         data      = <<EOF
-{{key "kubernetes/certs/ca/cert"}}
+{{key "kon/pki/ca/cert"}}
 EOF
       }
 
@@ -43,7 +43,7 @@ EOF
                   "--cluster-dns=10.96.0.10",
                   "--cluster-domain=cluster.local",
                   "--authorization-mode=Webhook",
-                  "--client-ca-file=local/kubernetes/pki/ca.crt",
+                  "--client-ca-file=local/kon/pki/ca.crt",
                   "--cadvisor-port=4194"]
       }
 

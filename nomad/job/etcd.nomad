@@ -23,6 +23,24 @@ ETCD_INITIAL_CLUSTER={{key "etcd/initial-cluster"}}
 ETCD_INITIAL_CLUSTER_TOKEN={{key "etcd/initial-cluster-token"}}
 EOH
       }
+      template {
+        destination = "local/kon/pki/ca.crt"
+        data      = <<EOF
+{{key "kon/pki/ca/cert"}}
+EOF
+      }
+      template {
+        destination = "local/kon/pki/etcd.service.consul.crt"
+        data      = <<EOF
+{{key "etcd/service/cert"}}
+EOF
+      }
+      template {
+        destination = "local/kon/pki/etcd.service.consul.key"
+        data      = <<EOF
+{{key "etcd/service/key"}}
+EOF
+      }
       #NODE_STATUS={{printf "kubernetes/nodes/%s" (env "attr.unique.hostname") | key}}
       config {
         image = "gcr.io/google_containers/etcd-amd64:3.0.17"
@@ -36,14 +54,19 @@ EOH
         command = "etcd"
         args = [
           "--name", "${attr.unique.hostname}",
-          "--initial-advertise-peer-urls", "http://${attr.unique.network.ip-address}:2380",  
-          "--listen-peer-urls", "http://${attr.unique.network.ip-address}:2380",
-          "--listen-client-urls", "http://${attr.unique.network.ip-address}:2379,http://127.0.0.1:2379",
-          "--advertise-client-urls", "http://${attr.unique.network.ip-address}:2379",
-        #  "--initial-cluster-token", "${ETCD_INITIAL_CLUSTER_TOKEN}",
-        #  "--initial-cluster", "${ETCD_INITIAL_CLUSTER}",
-          "--initial-cluster-state", "new",
-          "--data-dir", "/var/lib/etcd"
+          "--initial-advertise-peer-urls=https://${attr.unique.network.ip-address}:2380",  
+          "--listen-peer-urls=https://${attr.unique.network.ip-address}:2380",
+          "--listen-client-urls=https://${attr.unique.network.ip-address}:2379,https://127.0.0.1:2379",
+          "--advertise-client-urls=https://etcd.service.consul:2379",
+        #  "--initial-cluster-token=${ETCD_INITIAL_CLUSTER_TOKEN}",
+        #  "--initial-cluster=${ETCD_INITIAL_CLUSTER}",
+          "--initial-cluster-state=new",
+          "--data-dir=/var/lib/etcd",
+          "--trusted-ca-file=local/kon/pki/ca.crt",
+          "--cert-file=local/kon/pki/etcd.service.consul.crt",
+          "--key-file=local/kon/pki/etcd.service.consul.key",
+          "--client-cert-auth=true",
+          "--peer-auto-tls"
         ]
       }
 
@@ -52,7 +75,7 @@ EOH
         memory = 256 # 256MB
         network {
           mbits = 100
-          port "http" {
+          port "https" {
             static = "2379"
           }
         }
@@ -61,12 +84,18 @@ EOH
       service {
         name = "etcd"
         tags = ["global", "etcd"]
-        port = "http"
+        port = "https"
         check {
-          type = "http"
+          type = "script"
+          command = "/usr/bin/curl"
+          args = [
+            "--insecure",
+            "--cacert local/kon/pki/ca.crt",
+            "--cert local/kon/pki/etcd.service.consul.crt",
+            "--key local/kon/pki/etcd.service.consul.key",
+            "https://${attr.unique.network.ip-address}:2379/health"
+          ]
           interval = "5s"
-          port = "http"
-          path = "/health"
           timeout = "15s"
         }
       }

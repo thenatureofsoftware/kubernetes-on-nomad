@@ -80,12 +80,12 @@ test::pki::generate_nomad_cert () {
     assert "generate_nomad_cert_client_csf" "$(test -f $KON_PKI_DIR/client.us.nomad.csr; echo "$?")" "0"
 }
 
-test::pki::generate_consul_config () {
+test::pki::generate_csr () {
     source $SCRIPTDIR/common.sh
     source $SCRIPTDIR/config.sh
     source $SCRIPTDIR/pki.sh
 
-    assert "generate_consul_config" "$(pki::generate_consul_config server.east.consul | jq -r .CN)" "server.east.consul"
+    assert "generate_csr" "$(pki::generate_csr server.east.consul | jq -r .CN)" "server.east.consul"
 }
 
 trap test::pki::tear_down EXIT
@@ -93,6 +93,6 @@ trap test::pki::tear_down EXIT
 test::pki::setup
 (test::pki::generate_ca)
 (test::pki::generate_name)
-(test::pki::generate_consul_config)
+(test::pki::generate_csr)
 (test::pki::generate_consul_cert)
 (test::pki::generate_nomad_cert)

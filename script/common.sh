@@ -1,5 +1,38 @@
 #!/bin/bash
 
+###############################################################################
+# Returns system info as JSON.
+# https://stackoverflow.com/questions/38860529/create-json-using-jq-from-pipe-separated-keys-and-values-in-bash
+###############################################################################
+common::system_info () {
+    if [ "$_test_" ]; then
+        os=$(echo $_test_|awk '{print tolower($1)}')
+        arch=$(echo $_test_|awk '{print tolower($2)}')
+    else
+        os=$(uname | awk '{print tolower($0)}')
+        arch=$(uname -m | awk '{print tolower($0)}')
+    fi
+
+    case "$arch" in
+        x86_64)
+            arch="amd64"
+            ;;
+        armv8)
+            arch="arm64"
+            ;;
+        armv7l)
+            arch="arm"
+            ;;
+        *)
+    esac
+
+    echo $(jq -M -c \
+    --arg os 'os' --arg os_val "$os" \
+    --arg arch 'arch' --arg arch_val "$arch" \
+    '. | .[$os]=$os_val | .[$arch]=$arch_val' \
+    <<<'{}')
+}
+
 log () {
     _exit_value=$?
     common::log "info" "$1"
@@ -28,7 +61,9 @@ error () {
 ###############################################################################
 fail () {
     error "$1"
-    if [ -z "$_test_" ]; then exit 1; fi
+    if [ -z "$_test_" ]; then
+        exit 1;
+    fi
 }
 
 common::log () {
@@ -131,8 +166,16 @@ common::mk_bindir () {
         mkdir -p $BINDIR
     fi
 
-    if [ "$(env |grep PATH|grep '/opt/bin')" == "" ]; then
-        export PATH=$PATH:/opt/bin
+    if [ "$(env |grep PATH|grep "$BINDIR")" == "" ]; then
+        export PATH=$PATH:$BINDIR
+    fi
+
+    if [ ! -d "$KON_BIN_DIR" ]; then
+        mkdir -p $KON_BIN_DIR
+    fi
+
+    if [ "$(env |grep PATH|grep "$KON_BIN_DIR")" == "" ]; then
+        export PATH=$PATH:$KON_BIN_DIR
     fi
 }
 
