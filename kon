@@ -5,9 +5,27 @@
 ###############################################################################
 KON_VERSION=${KON_VERSION:=latest}
 KON_DIR=${KON_DIR:=/opt/kon}
-mkdir -p /opt/{kon,bin}
-if [ ! -f /opt/kon/kon.sh ]; then
-    mkdir -p /etc/kon
+
+check_root () {
+    if [[ $EUID -ne 0 ]]; then
+        error "must be run as root"
+        exit 1
+    fi
+}
+
+install () {
+    # Check that 
+    check_root
+    mkdir -p /opt/{bin,kon/bin}
     docker run --rm -v $KON_DIR:/opt/kon thenatureofsoftware/kon:$KON_VERSION
+}
+
+if [ ! -f /opt/kon/kon.sh ]; then
+    install
 fi
+
+if [ ! "$(echo "$PATH" | grep /opt/kon/bin)" ]; then PATH=/opt/kon/bin:$PATH; fi
+
 source $KON_DIR/kon.sh
+
+
