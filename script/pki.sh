@@ -20,7 +20,7 @@ pki::generate_ca () {
 pki::generate_client_cert () {
     node=$1
     if [ ! "$node" ]; then fail "node is missing"; fi
-    pki::generate_cert "$(config::get_host $node)" "$node"
+    pki::generate_certificate "$(config::get_host $node)" "$(config::get_host $node),$node"
 }
 
 pki::generate_consul_cert () {
@@ -38,21 +38,41 @@ pki::generate_nomad_cert () {
 pki::generate_cert () {
     cert_bundle_name=$1
     ip_addr=$2
+
+    # Checks
     if [ ! "$cert_bundle_name" ]; then fail "cert bundle name is missing"; fi
     if [ ! "$ip_addr" ]; then fail "node IP-address is missing"; fi
-
     if [ ! -f "$KON_PKI_DIR/cfssl.json" ]; then pki::generate_cfssl_config; fi
-
-    if [ ! "$cert_bundle_name" ]; then info "cert_bundle_name is missing"; fi
     if [ ! $(common::which cfssl) ]; then fail "cfssl not found, please install it"; fi
-    if [ ! -f "$KON_PKI_DIR/ca.key" ]; then info "ca key is missing"; fi
-    if [ ! -f "$KON_PKI_DIR/ca.crt" ]; then info "ca certificate is missing"; fi
+    pki::check_ca
     
     if [ -f "$KON_PKI_DIR/$cert_bundle_name.crt" ]; then
         info "certificate and key already generated for $cert_bundle_name, moving on"
     else
         info "generating certificate and key  for $cert_bundle_name"
-        cert_json=$(pki::generate_csr $cert_bundle_name | cfssl -loglevel 5 gencert -ca=$KON_PKI_DIR/ca.crt -config=$KON_PKI_DIR/cfssl.json -profile=kon -ca-key=$KON_PKI_DIR/ca.key -hostname="$cert_bundle_name,$ip_addr,localhost,127.0.0.1" -)
+        cert_json=$(pki::generate_csr $cert_bundle_name | cfssl -loglevel 5 gencert -ca=$KON_PKI_DIR/ca.crt -config=$KON_PKI_DIR/cfssl.json -profile=kon -ca-key=$KON_PKI_DIR/ca.key -hostname="$cert_bundle_name,localhost,127.0.0.1" -)
+        echo $cert_json | jq -r .csr > $KON_PKI_DIR/$cert_bundle_name.csr
+        echo $cert_json | jq -r .cert > $KON_PKI_DIR/$cert_bundle_name.crt
+        echo $cert_json | jq -r .key > $KON_PKI_DIR/$cert_bundle_name.key
+    fi
+}
+
+pki::generate_certificate () {
+    cert_bundle_name=$1
+    hosts=$2
+
+    # Checks
+    if [ ! "$cert_bundle_name" ]; then fail "cert bundle name is missing"; fi
+    if [ ! "$hosts" ]; then fail "hosts list is missing"; fi
+    if [ ! -f "$KON_PKI_DIR/cfssl.json" ]; then pki::generate_cfssl_config; fi
+    if [ ! $(common::which cfssl) ]; then fail "cfssl not found, please install it"; fi
+    pki::check_ca
+    
+    if [ -f "$KON_PKI_DIR/$cert_bundle_name.crt" ]; then
+        info "certificate and key already generated for $cert_bundle_name, moving on"
+    else
+        info "generating certificate and key  for $cert_bundle_name and hosts [$hosts]"
+        cert_json=$(pki::generate_csr $cert_bundle_name | cfssl -loglevel 5 gencert -ca=$KON_PKI_DIR/ca.crt -config=$KON_PKI_DIR/cfssl.json -profile=kon -ca-key=$KON_PKI_DIR/ca.key -hostname="$hosts" -)
         echo $cert_json | jq -r .csr > $KON_PKI_DIR/$cert_bundle_name.csr
         echo $cert_json | jq -r .cert > $KON_PKI_DIR/$cert_bundle_name.crt
         echo $cert_json | jq -r .key > $KON_PKI_DIR/$cert_bundle_name.key
@@ -84,6 +104,7 @@ pki::generate_name () {
 }
 
 pki::generate_etcd_service_cert() {
+    pki::check_ca
     pki::generate_cfssl_config
     info "generating etcd service certificates"
     cert_json=$(echo {} | $KON_BIN_DIR/cfssl -loglevel 5 gencert -ca=$KON_PKI_DIR/ca.crt -config=$KON_PKI_DIR/cfssl.json -profile=kon -ca-key=$KON_PKI_DIR/ca.key -hostname="etcd.service.consul" -)
@@ -101,17 +122,7 @@ pki::generate_etcd_service_cert() {
 pki::generate_csr () {
     if [ ! -f "$KON_CONFIG_DIR/cfssl-config.json" ]; then pki::generate_cfssl_config; fi
     cat <<EOF
-{
-    "CN": "$1",
-    "hosts": [
-        "localhost",
-        "127.0.0.1"
-    ],
-    "key": {
-        "algo": "rsa",
-        "size": 2048
-    }
-}
+{}
 EOF
 }
 
@@ -206,14 +217,19 @@ EOF
 ###############################################################################
 pki::setup_node_certificates () {
     if [ ! "$(consul::has_key "$konPkiCAKey/cert")" ]; then
-        info "storing kon ca certificate and key in consul"
-        consul::put_file "$konPkiCAKey/cert" "$KON_PKI_DIR/ca.crt"
-        common::fail_on_error "failed to put ca cert"
-        consul::put_file "$konPkiCAKey/key" "$KON_PKI_DIR/ca.key"
-        common::fail_on_error "failed to put ca key"
+        if [ -s "$KON_PKI_DIR/ca.crt" ] && [ -s "$KON_PKI_DIR/ca.key" ]; then
+            info "storing kon ca certificate and key in consul"
+            consul::put_file "$konPkiCAKey/cert" "$KON_PKI_DIR/ca.crt"
+            common::fail_on_error "failed to put ca cert"
+            consul::put_file "$konPkiCAKey/key" "$KON_PKI_DIR/ca.key"
+            common::fail_on_error "failed to put ca key"
+        else
+            fail "no ca cert or key"
+        fi
     else
         info "fetching kon ca key from consul"
-        consul::get "$konPkiCAKey/key" > "$KON_PKI_DIR/ca.key"
+        consul kv get "$konPkiCAKey/key" > "$KON_PKI_DIR/ca.key"
         common::fail_on_error "failed to fetch ca key"
+        if [ ! -s "$KON_PKI_DIR/ca.key" ]; then fail "no ca key"; fi
     fi
 }

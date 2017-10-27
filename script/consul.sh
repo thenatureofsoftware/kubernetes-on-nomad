@@ -271,7 +271,7 @@ consul::generate_encryption_key () {
         consul_encryption_key=$(docker run --rm -it consul keygen)
         if [ $? -gt 0 ]; then fail "failed to generate encryption key using consul Docker image"; fi
     fi
-    echo "$consul_encryption_key"
+    echo "$(echo -e "${consul_encryption_key}" | tr -d '[:space:]')"
 }
 
 consul::is_running () {

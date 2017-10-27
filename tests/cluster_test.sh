@@ -8,9 +8,11 @@ swe:north:172.17.4.103,us:east:172.17.4.104
 
 test::cluster::start () {
     source $SCRIPTDIR/common.sh
+    source $SCRIPTDIR/common_install.sh
     source $SCRIPTDIR/config.sh
     source $SCRIPTDIR/pki.sh
     source $SCRIPTDIR/consul.sh
+    source $SCRIPTDIR/ssh.sh
     source $SCRIPTDIR/cluster.sh
 
     active_config=$(common::dev_null)
@@ -18,4 +20,4 @@ test::cluster::start () {
     assert "start" "$(cluster::apply)" ""
 }
 
-(test::cluster::start)
+#(test::cluster::start)

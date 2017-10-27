@@ -28,7 +28,7 @@ KON_CONSUL_CONFIG_DIR=${KON_CONSUL_CONFIG_DIR:=/etc/consul}
 KON_CONSUL_CONFIG_TLS=$KON_CONSUL_CONFIG_DIR/tls.json
 
 # Nomad
-NOMAD_VERSION=${NOMAD_VERSION:=0.7.0-beta1}
+NOMAD_VERSION=${NOMAD_VERSION:=0.7.0-rc3}
 
 MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:=9B4T6UOOQNQRRHSAWVPY}
 MINIO_SECRET_KEY=${MINIO_SECRET_KEY:=HtcN68VAx0Ty5UslYokP6UA3OBfWVMFDZX6aJIfh}
@@ -57,6 +57,7 @@ controllerMgrStateKey="$stateKey/kube-controller-manager"
 kubernetesStateKey="$stateKey/kubernetes"
 
 kubernetesKey="kubernetes"
+kubernetesVersionKey="$kubernetesKey/version"
 kubernetesNetworkKey="$kubernetesKey/network"
 kubernetesPodNetworkCidrKey="$kubernetesNetworkKey/pod-network-cidr"
 minionKey="$kubernetesKey/minion"

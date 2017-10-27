@@ -5,6 +5,7 @@
 declare -A config_nodes
 declare -A config_regions
 # config_minions[<IP-address]=<hostname>
+declare -A config_servers
 declare -A config_minions
 config_bootstrap_server=""
 
@@ -103,6 +104,7 @@ config::nodes () {
     local ip_address="$(config::node_ip $server)"
     local meta_info="$(config::node_meta $server)"
     config_nodes[$ip_address]=$meta_info
+    config_servers[$ip_address]=$meta_info
   done
 
   config::bootstrap_server

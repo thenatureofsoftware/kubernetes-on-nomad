@@ -4,7 +4,6 @@
 # Install cfssl
 ###############################################################################
 common_install::cfssl () {
-    common::check_root
     common::mk_bindir
 
     if [ ! "$_test_" ] && [ "$(common::which cfssl)" ]; then
@@ -21,8 +20,8 @@ common_install::cfssl () {
     echo "Install for $os $arch"
 
     if [ ! -d "$KON_BIN_DIR" ]; then fail "$KON_BIN_DIR no such directory"; return 1; fi
-    curl -sSL -o $KON_BIN_DIR/cfssl https://pkg.cfssl.org/R1.2/cfssl_$os-$arch
-    chmod a+x $KON_BIN_DIR/cfssl
+    sudo curl -sSL -o $KON_BIN_DIR/cfssl https://pkg.cfssl.org/R1.2/cfssl_$os-$arch
+    sudo chmod a+x $KON_BIN_DIR/cfssl
 }
 
 ###############################################################################

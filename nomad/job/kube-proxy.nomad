@@ -14,6 +14,7 @@ job "kube-proxy" {
         env         = true
         data      = <<EOH
 CLUSTER_CIDR={{key "kubernetes/network/pod-network-cidr"}}
+K8S_VERSION={{key "kubernetes/version"}}
 EOH
       }
 
@@ -25,14 +26,14 @@ EOF
       }
 
       config {
-        image = "gcr.io/google_containers/kube-proxy-amd64:v1.7.6"
+        image = "gcr.io/google_containers/kube-proxy-amd64:${K8S_VERSION}"
         network_mode = "host"
         privileged = true
         
         volumes = [
           "local/kubernetes:/etc/kubernetes",
           "/var/lib/kube-proxy:/var/lib/kube-proxy",
-          "/run/xtables.lock:/run/xtables.lock"
+          "/run:/run"
         ]
 
         command = "kube-proxy"

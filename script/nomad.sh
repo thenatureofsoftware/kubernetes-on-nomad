@@ -2,9 +2,11 @@
 
 nomad::env () {
     local ip_addr="$(common::ip_addr)"
+    local region="$(config::get_region "$ip_addr")"
     local hostname="$(config::get_host "$ip_addr")"
     cat <<EOF
 export NOMAD_ADDR=https://localhost:4646
+export NOMAD_REGION=$region
 export NOMAD_CACERT=$KON_PKI_DIR/ca.crt
 export NOMAD_CLIENT_CERT=$KON_PKI_DIR/$hostname.crt
 export NOMAD_CLIENT_KEY=$KON_PKI_DIR/$hostname.key
@@ -84,6 +86,10 @@ nomad::resolve_nomad_service_unit_file () {
             ;;
         *)
     esac
+}
+
+nomad::bootstrap_expected () {
+    echo ${#config_servers[@]}
 }
 
 ###############################################################################
@@ -198,13 +204,17 @@ EOF
 nomad::client_template () {
     cert_bundle=$(pki::generate_name "nomad" "$(common::ip_addr)")
     cat <<EOF > "$1"
-bind_addr = "0.0.0.0"
+
 data_dir = "/var/lib/nomad"
+
+bind_addr = "0.0.0.0"
+
 advertise {
- http = "127.0.0.1"
+ http = "${2}"
  rpc  = "${2}"
  serf = "${2}"
 }
+
 client {
   enabled = true
   network_interface = "$KON_BIND_INTERFACE"
@@ -219,17 +229,19 @@ client {
     "docker.privileged.enabled" = "true"
   }
 }
+
 consul {
   address = "127.0.0.1:8500"
 }
+
 tls {
   http = true
   rpc  = true
   ca_file = "${KON_PKI_DIR}/ca.crt"
   cert_file = "${KON_PKI_DIR}/${cert_bundle}.crt"
   key_file = "${KON_PKI_DIR}/${cert_bundle}.key"
-  verify_server_hostname = false
-  verify_https_client    = false
+  verify_server_hostname = true
+  verify_https_client    = true
 }
 EOF
 }
@@ -237,28 +249,34 @@ EOF
 nomad::server_template() {
     cert_bundle=$(pki::generate_name "nomad" "$(common::ip_addr)")
     cat <<EOF > $1
-bind_addr = "0.0.0.0"
+
 data_dir = "/var/lib/nomad"
+
+bind_addr = "0.0.0.0"
+
 advertise {
- http = "127.0.0.1"
+ http = "${2}"
  rpc  = "${2}"
  serf = "${2}"
 }
+
 server { 
  enabled = true 
- bootstrap_expect = 1 
+ bootstrap_expect = $(nomad::bootstrap_expected) 
 }
+
 consul {
   address = "127.0.0.1:8500"
 }
+
 tls {
   http = true
   rpc  = true
   ca_file = "${KON_PKI_DIR}/ca.crt"
   cert_file = "${KON_PKI_DIR}/${cert_bundle}.crt"
   key_file = "${KON_PKI_DIR}/${cert_bundle}.key"
-  verify_server_hostname = false
-  verify_https_client    = false
+  verify_server_hostname = true
+  verify_https_client    = true
 } 
 EOF
 }
@@ -266,13 +284,17 @@ EOF
 nomad::dev_template() {
     cert_bundle=$(pki::generate_name "nomad" "$(common::ip_addr)")
     cat <<EOF > "$1"
-bind_addr = "0.0.0.0"
+
 data_dir = "/var/lib/nomad"
+
+bind_addr = "0.0.0.0"
+
 advertise {
- http = "127.0.0.1"
+ http = "${2}"
  rpc  = "${2}"
  serf = "${2}"
 }
+
 client {
   node_class = "etcd,kubelet"
   no_host_uuid = false
@@ -285,17 +307,19 @@ client {
     "docker.privileged.enabled" = "true"
   }
 }
+
 server { 
  enabled = true  
 }
+
 tls {
   http = true
   rpc  = true
   ca_file = "${KON_PKI_DIR}/ca.crt"
   cert_file = "${KON_PKI_DIR}/${cert_bundle}.crt"
   key_file = "${KON_PKI_DIR}/${cert_bundle}.key"
-  verify_server_hostname = false
-  verify_https_client    = false
+  verify_server_hostname = true
+  verify_https_client    = true
 }
 EOF
 }

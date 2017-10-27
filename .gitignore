@@ -10,3 +10,13 @@ setup.env
 **/*.log
 **/*.out
 **/.pki
+.secret
+
+# Terraform
+**/*.tfstate*
+**/.terraform
+
+
+#ssh-keys
+**/*id_rsa*
+

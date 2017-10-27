@@ -26,14 +26,22 @@ EOF
 
 ssh::copy () {
     ip_addr=$1
+    region=$(config::get_region "$ip_addr")
     if [ ! "$ip_addr" ]; then fail "ip_addr is missing"; fi
     consul_cert_bundle_name="$(pki::generate_name "consul" "$ip_addr")"
     nomad_cert_bundle_name="$(pki::generate_name "nomad" "$ip_addr")"
 
+    nomad_files=""
+    if [ "$nomad_cert_bundle_name" == "client.$region.nomad" ]; then
+        nomad_files="client.$region.nomad.*"
+    else
+        nomad_files="client.$region.nomad.* server.$region.nomad.*"
+    fi
+
     (
     cd $KON_PKI_DIR
     rm -f pki.tgz
-    tar zcf pki.tgz $(config::get_host "$ip_addr").* $consul_cert_bundle_name.* $nomad_cert_bundle_name.* ca.*
+    tar zcf pki.tgz $(config::get_host "$ip_addr").* $consul_cert_bundle_name.* $nomad_files ca.*
     cd -
     )
 
@@ -45,7 +53,7 @@ ssh::copy () {
         vagrant scp $KON_PKI_DIR/pki.tgz $(ssh::host):~/
     else
         scp $active_config $(ssh::user)$(ssh::host):~/
-        scp $BASEDIR/kon $(ssh::user)$(ssh::host):~/
+        scp $(common::which kon) $(ssh::user)$(ssh::host):~/
         scp $KON_PKI_DIR/pki.tgz $(ssh::user)$(ssh::host):~/
     fi
 }

@@ -1,14 +1,14 @@
 #!/bin/bash
 
 ###############################################################################
-# Wrapper script - installs kon script from docker image.
+# Wrapper script - installs kon script from docker image. https://goo.gl/2RRdFu
 ###############################################################################
 KON_VERSION=${KON_VERSION:=latest}
 KON_DIR=${KON_DIR:=/opt/kon}
 
 check_root () {
     if [[ $EUID -ne 0 ]]; then
-        error "must be run as root"
+        echo "must be run as root"
         exit 1
     fi
 }

@@ -6,8 +6,10 @@
 
 cluster::apply () {
 
+    # Install cfssl if it's missing
+    (common_install::cfssl)
+    
     KON_PKI_DIR=$PWD/.pki
-
     mkdir -p $KON_PKI_DIR/
 
     # Verify encryption keys.
@@ -16,18 +18,21 @@ cluster::apply () {
     # Generate CA
     pki::generate_ca
 
+    # Generate all certificates
     for node in ${!config_nodes[@]}
     do  
-        pki::generate_client_cert $node      
+        pki::generate_client_cert $node   
         pki::generate_consul_cert $node
         pki::generate_nomad_cert $node
+    done
 
-        KON_SSH_HOST="$(config::get_host $node)"
-        if [ "$KON_SSH_HOST" == "" ]; then
-            KON_SSH_HOST="$node"
-        fi
-        info "$KON_SSH_HOST will be used as node"
-        cluster::start_node $node
+    # Start bootstrap sever first 
+    cluster::start_node $KON_BOOTSTRAP_SERVER
+
+    # Start all other nodes
+    for node in ${!config_nodes[@]}
+    do  
+        if [ ! "$node" == "$KON_BOOTSTRAP_SERVER" ]; then cluster::start_node $node; fi
     done
 }
 
@@ -36,6 +41,13 @@ cluster::apply () {
 ###############################################################################
 cluster::start_node () {
     node=$1
+
+    KON_SSH_HOST="$(config::get_host $node)"
+    if [ "$KON_SSH_HOST" == "" ]; then
+        KON_SSH_HOST="$node"
+    fi
+    info "$KON_SSH_HOST will be used as node"
+
     info "starting node $node $KON_SSH_HOST ..."
     
     ssh::ping > "$(common::dev_null)" 2>&1
