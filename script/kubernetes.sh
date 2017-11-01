@@ -89,7 +89,8 @@ kubernetes::config () {
 
     kubernetes::generate_certificates
     kubernetes::generate_kubeconfigs
-    kubernetes::load_kube_proxy_config
+    #kubernetes::load_kube_proxy_config
+    consul::put $kubernetesVersionKey $K8S_VERSION
 
     # Setup kubectl
     mkdir -p ~/.kube

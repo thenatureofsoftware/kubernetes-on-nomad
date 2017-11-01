@@ -88,7 +88,7 @@ EOH
           
           check_restart {
             limit = 5
-            grace_period = "30s"
+            grace = "30s"
             ignore_warnings = false
           }
         }

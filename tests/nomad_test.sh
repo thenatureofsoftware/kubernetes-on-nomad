@@ -50,5 +50,17 @@ test::nomad::servers_config () {
     assert "servers_config" "$(nomad::servers_config)" '["192.168.0.101","192.168.0.102"]'
 }
 
+test::nomad::bootstrap_expected () {
+    source $SCRIPTDIR/common.sh
+    source $SCRIPTDIR/config.sh
+    source $SCRIPTDIR/nomad.sh
+
+    KON_SERVERS=swe:swe-east:core-01:172.17.4.101,swe:swe-west:core-02:172.17.4.102,swe:swe-north:core-03:172.17.4.103,us:us-east::172.17.4.104
+    
+    config::nodes
+    assert "bootstrap_expected" "$(nomad::bootstrap_expected)" "4"
+}
+
 (test::nomad::client_config)
 (test::nomad::servers_config)
+(test::nomad::bootstrap_expected)

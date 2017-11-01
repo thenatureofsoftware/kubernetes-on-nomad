@@ -163,7 +163,7 @@ common::error_on_error () {
 ###############################################################################
 common::mk_bindir () {
     if [ ! -d "$BINDIR" ]; then
-        mkdir -p $BINDIR
+        sudo mkdir -p $BINDIR
     fi
 
     if [ "$(env |grep PATH|grep "$BINDIR")" == "" ]; then
@@ -171,7 +171,7 @@ common::mk_bindir () {
     fi
 
     if [ ! -d "$KON_BIN_DIR" ]; then
-        mkdir -p $KON_BIN_DIR
+        sudo mkdir -p $KON_BIN_DIR
     fi
 
     if [ "$(env |grep PATH|grep "$KON_BIN_DIR")" == "" ]; then
