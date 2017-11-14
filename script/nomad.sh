@@ -14,32 +14,37 @@ EOF
 }
 
 nomad::install () {
-
     if [ $(common::which nomad) ]; then
         info "Nomad already installed $(nomad version)"
         return 0
     fi
-
-    wget --quiet https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_amd64.zip
-    
-    if [ $? -gt 0 ]; then fail "failed to download nomad ${NOMAD_VERSION}"; fi
-    
+    info "downloading nomad version ${NOMAD_VERSION}..."
     tmpdir=$(mktemp -d kon.XXXXXX)
-    unzip -d $tmpdir nomad_${NOMAD_VERSION}_linux_amd64.zip
-    mv $tmpdir/nomad ${BINDIR}/
-    rm -f nomad_${NOMAD_VERSION}_linux_amd64.zip*
-    nomad version > "$(common::dev_null)" 2>&1
+    curl -o $tmpdir/nomad.zip -sS $(nomad::download_url)
+    if [ $? -gt 0 ]; then fail "failed to download nomad ${NOMAD_VERSION}"; fi
+    unzip -qq -o -d ${BINDIR} $tmpdir/nomad.zip
+    rm -rf $tmpdir
+    ${BINDIR}/nomad version > "$(common::dev_null)" 2>&1
 
     if [ $? -gt 0 ]; then fail "Nomad install failed!"; fi
+    info "nomad version ${NOMAD_VERSION} installed in ${BINDIR}"
+}
+
+nomad::download_url () {
+    sys_info=$(common::system_info)
+    os=$(echo $sys_info|jq -r  .os)
+    arch=$(echo $sys_info|jq -r  .arch)
+    echo "https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_${os}_${arch}.zip"
 }
 
 nomad::start () {
     if [ ! "$(common::which nomad)" ]; then fail "Nomad not installed, please install nomad first."; fi
-    
     if [ ! -f "$(nomad::resolve_nomad_service_unit_file)" ]; then
         nomad::deploy_service_unit
     else
+        info "restarting nomad service..."
         systemctl restart nomad > "$(common::dev_null)" 2>&1
+        info "nomad service restarted"
     fi
 }
 
@@ -51,7 +56,7 @@ nomad::stop () {
 
 nomad::deploy_service_unit () {
     mkdir -p /etc/nomad
-    log "OS: $(common::os)"
+    info "installing nomad service for os $(common::os) ..."
 
     nomad_service_unit_file=$(nomad::resolve_nomad_service_unit_file)
     nomad_advertise_ip=$(common::ip_addr)
@@ -74,6 +79,7 @@ nomad::deploy_service_unit () {
     systemctl disable nomad.service > "$(common::dev_null)" 2>&1
     systemctl enable nomad.service > "$(common::dev_null)" 2>&1
     systemctl restart nomad.service > "$(common::dev_null)" 2>&1
+    info "nomad service installed and started"
 }
 
 nomad::resolve_nomad_service_unit_file () {
@@ -158,6 +164,7 @@ nomad::run_job () {
     if [ "$1" == "" ]; then fail "job name can't be empty, did you forgett the argument?"; fi
     local job_name="$1"
 
+    eval $(nomad::env)
     for region in ${!config_regions[@]}; do
         info "running nomad job $job_name in region $region"
         cat $JOBDIR/${job_name}.nomad | config::configure_job $region | nomad run -detach -region=$region -
@@ -179,6 +186,7 @@ nomad::stop_job () {
 
     if [ ! "$(consul::get $stateKey/$job_name)" == $STARTED ]; then warn "$job_name not started"; fi
 
+    eval $(nomad::env)
     nomad stop -purge $job_name > $(common::dev_null) 2>&1
     common::error_on_error "failed to stop $job_name."
     consul::put "$stateKey/$job_name" $STOPPED
@@ -221,6 +229,7 @@ client {
   servers = ${4}
   node_class = "${3}"
   no_host_uuid = false
+  $KON_NETWORK_SPEED
 
   options = {
     "driver.raw_exec.enable" = "1"

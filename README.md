@@ -37,6 +37,10 @@ core-01 ~ # kon kubernetes config
 core-01 ~ # kon kubernetes start
 ```
 
-see the [CoreOS example](./examples/coreos)
+## Examples
+
+* [CoreOS Vagrant example](./examples/coreos)
+* [CoreOS Azure example](./examples/azure)
+* [Ubuntu Scaleway example](./examples/scaleway)
 
 

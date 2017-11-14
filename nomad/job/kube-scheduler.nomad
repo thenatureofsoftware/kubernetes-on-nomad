@@ -22,9 +22,14 @@ job "kube-scheduler" {
 EOF
       }
 
+      artifact {
+        source = "hyperkube"
+      }
+
       config {
-        command = "/opt/bin/kube-scheduler"
+        command = "local/hyperkube"
         args    = [
+          "kube-scheduler",
           "--address=${NOMAD_IP_scheduler}",
           "--leader-elect=true",
           "--kubeconfig=local/kubernetes/scheduler.conf"

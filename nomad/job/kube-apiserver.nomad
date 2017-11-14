@@ -77,9 +77,14 @@ EOF
 EOF
       }
 
+      artifact {
+        source = "hyperkube"
+      }
+
       config {
-        command = "/opt/bin/kube-apiserver"
+        command = "local/hyperkube"
         args    = [
+          "kube-apiserver",
           "--proxy-client-cert-file=local/kubernetes/pki/front-proxy-client.crt",
           "--proxy-client-key-file=local/kubernetes/pki/front-proxy-client.key",
           "--insecure-port=0",

@@ -58,6 +58,8 @@ kubernetesStateKey="$stateKey/kubernetes"
 
 kubernetesKey="kubernetes"
 kubernetesVersionKey="$kubernetesKey/version"
+kubernetesHyperkubeUrl="$kubernetesKey/hyperkubeUrl"
+kubernetesCniUrl="$kubernetesKey/cniUrl"
 kubernetesNetworkKey="$kubernetesKey/network"
 kubernetesPodNetworkCidrKey="$kubernetesNetworkKey/pod-network-cidr"
 minionKey="$kubernetesKey/minion"
@@ -146,8 +148,7 @@ setup-node () {
     pki::setup_node_certificates
     nomad::install
     nomad::start
-    kubernetes::install
-
+    kubernetes::cni_install
 }
 
 ###############################################################################
@@ -519,6 +520,20 @@ fi
 if [ $_arg_quiet == on ]; then NO_LOG=true; fi
 
 ###############################################################################
+# Check log file permissions
+###############################################################################
+touch $KON_LOG_FILE > $(common::dev_null) 2>&1 || KON_LOG_FILE="/tmp/kon.log"
+touch $KON_LOG_FILE > $(common::dev_null) 2>&1 || KON_LOG_FILE="$(pwd)/kon.log"
+touch $KON_LOG_FILE > $(common::dev_null) 2>&1 || KON_LOG_FILE=$(common::dev_null)
+
+###############################################################################
+# Load configuration
+###############################################################################
+config::configure
+export PATH=$(kubernetes::bin_path):$PATH
+trap config::clean_up EXIT
+
+###############################################################################
 # Banner
 ###############################################################################
 if [ "$_arg_quiet" == "off" ]; then
@@ -535,18 +550,6 @@ if [ "$_arg_quiet" == "off" ]; then
     printf "$nomad_version, $consul_version, $kubernetes_version, $kubeadm_version\n\n"
 fi
 
-###############################################################################
-# Check log file permissions
-###############################################################################
-touch $KON_LOG_FILE > $(common::dev_null) 2>&1 || KON_LOG_FILE="/tmp/kon.log"
-touch $KON_LOG_FILE > $(common::dev_null) 2>&1 || KON_LOG_FILE="$(pwd)/kon.log"
-touch $KON_LOG_FILE > $(common::dev_null) 2>&1 || KON_LOG_FILE=$(common::dev_null)
-
-###############################################################################
-# Load configuration
-###############################################################################
-config::configure
-trap config::clean_up EXIT
 
 ###############################################################################
 # Execute command                                                             #

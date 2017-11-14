@@ -51,7 +51,6 @@ etcd::config () {
 # Starts etcd 
 ###############################################################################
 etcd::start () {
-
     for key in  $etcdServersKey $etcdInitialClusterKey $etcdInitialClusterTokenKey $etcdServiceKey/cert $etcdServiceKey/key; do
         if [ ! "$(consul::has_key "$key")" ]; then
             consul::fail_if_missing_key $key "$key is missing, configure etcd first"

@@ -180,7 +180,7 @@ function config::datacenters () {
 # stdin nomad job cat <nomad job> | config:configure_job swe | nomad run -
 ###############################################################################
 function config::configure_job () {
-  sed 's/"global"/"'"$1"'"/' | sed 's/"dc1"/"'"$(config::datacenters $1)"'"/'
+  sed -e 's/"global"/"'"$1"'"/' -e 's/"dc1"/"'"$(config::datacenters $1)"'"/' -e 's;"hyperkube";"'"$(consul::get $kubernetesHyperkubeUrl)"'";' -e 's;"cni";"'"$(consul::get $kubernetesCniUrl)"'";'
 }
 
 ###############################################################################
@@ -277,7 +277,7 @@ config::configure () {
 
   if [ -f "$active_config" ]; then
       source $active_config
-      info "read configuration from $active_config"
+      #info "read configuration from $active_config"
 
       if [ "$KON_SAMPLE_CONFIG" == "true" ]; then
           fail "can't use a sample configuration, please edit $active_config first"
@@ -376,9 +376,15 @@ KUBE_APISERVER_EXTRA_SANS=kubernetes.service.consul
 KUBE_APISERVER_ADDRESS=https://kubernetes.service.consul:6443
 
 ###############################################################################
+# It can sometime be required to set the network speed on the nomad client
+###############################################################################
+# KON_NETWORK_SPEED="network_speed = 1000"
+
+###############################################################################
 # Remove this variable or set it to false when done configuring.
 ###############################################################################
 KON_SAMPLE_CONFIG=true
+
 
 EOF
 }

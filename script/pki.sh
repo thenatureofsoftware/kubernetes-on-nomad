@@ -9,12 +9,15 @@ pki::install () {
 pki::generate_ca () {
     if [ ! $(common::which cfssl) ]; then fail "cfssl not found, please install it"; fi
     if [ "$KON_PKI_DIR" == "" ]; then fail "KON_PKI_DIR is not set, is KON_CONFIG loaded?"; fi
-    if [ -f "$KON_PKI_DIR/ca.crt" ]; then info "CA certificate already present, nothing to do"; fi
-    ca_json=$(pki::ca_csr | cfssl -loglevel 5 genkey -initca -)
-    #ca_json=$(cfssl print-defaults csr | cfssl gencert -initca -)
-    echo $ca_json | jq -r .csr > $KON_PKI_DIR/ca.csr
-    echo $ca_json | jq -r .cert > $KON_PKI_DIR/ca.crt
-    echo $ca_json | jq -r .key > $KON_PKI_DIR/ca.key
+    
+    if [ -f "$KON_PKI_DIR/ca.crt" ]; then
+        info "CA certificate already present, nothing to do";
+    else
+        ca_json=$(pki::ca_csr | cfssl -loglevel 5 genkey -initca -)
+        echo $ca_json | jq -r .csr > $KON_PKI_DIR/ca.csr
+        echo $ca_json | jq -r .cert > $KON_PKI_DIR/ca.crt
+        echo $ca_json | jq -r .key > $KON_PKI_DIR/ca.key
+    fi
 }
 
 pki::generate_client_cert () {

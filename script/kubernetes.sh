@@ -1,6 +1,17 @@
 #!/bin/bash
 
 ###############################################################################
+# Kubernetes bin directory
+###############################################################################
+kubernetes::bin_path () {
+    if [ "$K8S_BIN_DIR" ]; then fail "kubernetes bin path is already set: $K8S_BIN_DIR"; fi
+    local bin_dir="$KON_INSTALL_DIR/kubernetes-$K8S_VERSION/bin"
+    if [ ! -d "$K8S_BIN_DIR" ]; then mkdir -p $bin_dir; fi
+    export K8S_BIN_DIR=$bin_dir
+    echo "$bin_dir"
+}
+
+###############################################################################
 # Installs all Kubernetes components
 ###############################################################################
 kubernetes::install () {
@@ -13,67 +24,70 @@ kubernetes::install () {
 # Installs by download
 ###############################################################################
 kubernetes::install_by_download () {
-
     mkdir -p /etc/kubernetes/manifests
-    for kube_component in kubeadm kubectl kubelet kube-apiserver kube-scheduler kube-controller-manager; do
-        if [ ! $(common::which $kube_component) ]; then
-            
-            local version=""
-            if [ "$kube_component" == "kubeadm" ]; then
-                version=$KUBEADM_VERSION
-            else
-                version=$K8S_VERSION
-            fi
-
-            kubernetes::download_and_install "$kube_component" "$version"
-            common::fail_on_error "failed to install $kube_component"
+    kubernetes::bin_path > $(common::dev_null) 2>&1
+    for kube_component in kubeadm kubectl; do
+        local version=""
+        if [ "$kube_component" == "kubeadm" ]; then
+            version=$KUBEADM_VERSION
         else
-            info "$kube_component already installed"
+            version=$K8S_VERSION
         fi
+        kubernetes::download_and_install "$kube_component" "$version"
     done
+}
 
-    
+###############################################################################
+# Installs CNI binaries
+###############################################################################
+kubernetes::cni_url () {
+    if [ ! "$CNI_VERSION" ]; then fail "CNI_VERSION is not set, is KON_CONFIG loaded?"; fi
+    local sys_info=$(common::system_info)
+    local arch=$(echo $sys_info|jq -r  .arch)
+    echo "https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-${arch}-$CNI_VERSION.tgz"
+}
+
+kubernetes::cni_install () {
     if [ ! -f "/opt/cni/bin/loopback" ]; then
-        if [ "$CNI_VERSION" == "" ]; then fail "CNI_VERSION is not set, is KON_CONFIG loaded?"; fi
         info "installing cni plugins..."
-        info "$CNI_VERSION"
         mkdir -p /opt/cni/bin
-        curl -sL https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-amd64-$CNI_VERSION.tgz | tar zxv -C /opt/cni/bin > "$(common::dev_null)" 2>&1
+        curl -sL $(kubernetes::cni_url) | tar zxv -C /opt/cni/bin > "$(common::dev_null)" 2>&1
         common::fail_on_error "failed to install cni plugins"
+        info "cni plugins installed"
     else
         info "cni plugins already installed"
     fi
-}
-
-###############################################################################
-# Installs by using package manager
-###############################################################################
-kubernetes::install_by_apt () {
-    apt-get update > "$(common::dev_null)" 2>&1
-    apt-get install -y apt-transport-https > "$(common::dev_null)" 2>&1
-    curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - > "$(common::dev_null)" 2>&1
-    cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
-    deb http://apt.kubernetes.io/ kubernetes-xenial main
-EOF
-    local k8s_version=$(echo $K8S_VERSION | sed 's/v//g')-00
-    apt-get update > "$(common::dev_null)" 2>&1
-    apt-get install -y kubelet=$k8s_version kube-apiserver=$k8s_version > "$(common::dev_null)" 2>&1
-    kubelet::reset
-}
+} 
 
 ###############################################################################
 # Download helper function
 ###############################################################################
 kubernetes::download_and_install() {
+    if [ ! "$K8S_BIN_DIR" ]; then fail "Kubernetes bin path is not set"; fi
     if [ "$1" == "" ] || [ "$2" == "" ]; then
         fail "both component and version is required, got component:$2 and version:$1"
     fi
+    local component=$1
 
-    info "downloading and installing: $1 version: $2"
-    wget --quiet https://storage.googleapis.com/kubernetes-release/release/$2/bin/linux/amd64/$1
-    chmod a+x $1
-    mv $1 $BINDIR
+    if [ ! -f "$K8S_BIN_DIR/$component" ]; then
+        info "downloading and installing: $component version: $2"
+        curl -o $K8S_BIN_DIR/$component -sS $(kubernetes::download_url $component $2)
+        chmod +x $K8S_BIN_DIR/$component
+    fi
+    rm -f $BINDIR/$component
+    ln -s $K8S_BIN_DIR/$component $BINDIR/$component
+
+    $BINDIR/$1 --help > "$(common::dev_null)" 2>&1
+
+    if [ $? -gt 0 ]; then fail "$1 install failed!"; fi
     info "done installing $1"
+}
+
+kubernetes::download_url () {
+    sys_info=$(common::system_info)
+    os=$(echo $sys_info|jq -r  .os)
+    arch=$(echo $sys_info|jq -r  .arch)
+    echo "https://storage.googleapis.com/kubernetes-release/release/$2/bin/${os}/${arch}/$1"
 }
 
 ###############################################################################
@@ -87,10 +101,17 @@ kubernetes::config () {
         fi    
     done
 
+    kubernetes::bin_path > $(common::dev_null) 2>&1
+    if [ ! -f "$K8S_BIN_DIR/kubeadm" ]; then fail "kubeadm is required, please run kubernetes install first"; fi
+    if [ ! -f "$K8S_BIN_DIR/kubectl" ]; then fail "kubectl is required, please run kubernetes install first"; fi
+
     kubernetes::generate_certificates
     kubernetes::generate_kubeconfigs
+
     #kubernetes::load_kube_proxy_config
     consul::put $kubernetesVersionKey $K8S_VERSION
+    consul::put $kubernetesHyperkubeUrl $(kubernetes::download_url "hyperkube" "$K8S_VERSION")
+    consul::put $kubernetesCniUrl $(kubernetes::cni_url)
 
     # Setup kubectl
     mkdir -p ~/.kube
@@ -183,7 +204,7 @@ kubernetes::generate_kubeconfigs () {
 ###############################################################################
 kubernetes::generate_kubeconfig () {
     info "generating kubeconfig for minion: $1 with ip: $2"
-    rm $K8S_CONFIGDIR/kubelet.conf > /dev/null 2>&1
+    rm $K8S_CONFIGDIR/kubelet.conf > $(common::dev_null) 2>&1
     info "$(kubeadm alpha phase kubeconfig kubelet \
     --cert-dir=$K8S_PKI_DIR --node-name=$1 --apiserver-advertise-address=$KUBE_APISERVER --apiserver-bind-port=$KUBE_APISERVER_PORT)"
     common::fail_on_error "failed to generate kubeconfig for minion: $1 with ip: $2"
