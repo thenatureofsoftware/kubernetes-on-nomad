@@ -29,9 +29,14 @@ EOF
 EOF
       }
 
+      artifact {
+        source = "hyperkube"
+      }
+
       config {
-        command = "/opt/bin/kubelet"
-        args    = ["--node-ip=${attr.unique.network.ip-address}",
+        command = "local/hyperkube"
+        args    = ["kubelet",
+                  "--node-ip=${attr.unique.network.ip-address}",
                   "--fail-swap-on=false",
                   "--kubeconfig=local/kubernetes/kubelet.conf",
                   "--require-kubeconfig=true",

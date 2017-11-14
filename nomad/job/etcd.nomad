@@ -48,7 +48,7 @@ EOF
 
         volumes = [
           "local/kon/pki:/etc/kon/pki",
-          "local/data:/var/lib/etcd"
+          "/var/lib/etcd:/var/lib/etcd"
         ]
 
         command = "etcd"

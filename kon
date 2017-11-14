@@ -24,7 +24,8 @@ if [ ! -f /opt/kon/kon.sh ]; then
     install
 fi
 
-if [ ! "$(echo "$PATH" | grep /opt/kon/bin)" ]; then PATH=/opt/kon/bin:$PATH; fi
+if [ ! "$(echo "$PATH" | grep /opt/bin)" ]; then export PATH=/opt/bin:$PATH; fi
+if [ ! "$(echo "$PATH" | grep /opt/kon/bin)" ]; then export PATH=/opt/kon/bin:$PATH; fi
 
 source $KON_DIR/kon.sh
 

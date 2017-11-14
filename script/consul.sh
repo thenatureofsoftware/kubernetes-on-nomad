@@ -4,24 +4,28 @@
 # Installs Consul
 ###############################################################################
 consul::install () {
-    # Download Consul
-    wget --quiet https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_linux_amd64.zip
-    if [ $? -gt 0 ]; then fail "failed to download Consul ${CONSUL_VERSION}"; fi
 
-    common::mk_bindir
-    
-    tmpdir=$(mktemp -d kon.XXXXXX)
-    unzip -d $tmpdir consul_${CONSUL_VERSION}_linux_amd64.zip
-    mv $tmpdir/consul ${BINDIR}/
-    rm -f consul_${CONSUL_VERSION}_linux_amd64.zip*
-    
-    # Check consul is working
-    consul version > "$(common::dev_null)" 2>&1
-    if [ $? -eq 0 ]; then
-        info "$(consul version|grep Consul) installed"
-    else
-        fail "Consull install failed!"
+    if [ $(common::which consul) ]; then
+        info "Consul already installed $(consul version)"
+        return 0
     fi
+
+    tmpdir=$(mktemp -d kon.XXXXXX)
+    download_file=$tmpdir/consul.zip
+    curl -o $download_file -sS $(consul::download_url)
+    if [ $? -gt 0 ]; then fail "failed to download consul ${CONSUL_VERSION}"; fi
+    unzip -qq -o -d ${BINDIR} $download_file
+    rm -rf $tmpdir
+    ${BINDIR}/consul version > "$(common::dev_null)" 2>&1
+
+    if [ $? -gt 0 ]; then fail "Consul install failed!"; fi
+}
+
+consul::download_url () {
+    sys_info=$(common::system_info)
+    os=$(echo $sys_info|jq -r  .os)
+    arch=$(echo $sys_info|jq -r  .arch)
+    echo "https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_${os}_${arch}.zip"
 }
 
 consul::bind_interface () {
@@ -41,7 +45,15 @@ consul::bind_interface () {
 ###############################################################################
 consul::enable-consul-dns () {
     info "switching nameserver to consul"
-    if [ -L /etc/resolv.conf ] && [ ! "$(readlink /etc/resolv.conf)" == "/etc/kon/resolv.conf" ]; then
+    if [ -L /etc/resolv.conf ]; then
+        consul::enable-consul-dns-symbolic-link
+    else
+        consul::enable-consul-dns-file
+    fi
+}
+
+consul::enable-consul-dns-symbolic-link () {
+    if [ ! "$(readlink /etc/resolv.conf)" == "/etc/kon/resolv.conf" ]; then
         info "creating symlink /etc/resolv.conf -> /etc/kon/resolv.conf"
         cat <<EOF > /etc/kon/resolv.conf
 #Using Consul as ns
@@ -55,10 +67,28 @@ EOF
     fi
 }
 
+consul::enable-consul-dns-file () {
+    if [ ! -f /etc/resolv.conf.org ]; then
+        mv /etc/resolv.conf /etc/resolv.conf.org
+    fi
+    cat <<EOF > /etc/resolv.conf
+#Using Consul as ns
+nameserver $(common::ip_addr)
+EOF
+}
+
 ###############################################################################
 # Restores the /etc/resolv.conf symbolic link.
 ###############################################################################
 consul::disable-consul-dns () {
+    if [ -L /etc/resolv.conf ]; then
+        consul::disable-consul-dns-symbolic-link
+    else
+        consul::disable-consul-dns-file
+    fi
+}
+
+consul::disable-consul-dns-symbolic-link () {
     if [ ! -f "$KON_CONFIG_DIR/resolv_conf_org" ]; then
         fail "no resolv.conf target found, can't restore."
     fi
@@ -71,6 +101,13 @@ consul::disable-consul-dns () {
     rm /etc/resolv.conf
     ln -s $org_link_target /etc/resolv.conf
     if [ $? -gt 0 ]; then fail "failed to restore DNS config!"; fi
+}
+
+consul::disable-consul-dns-file () {
+    if [ -f /etc/resolv.conf.org ]; then
+        rm -f /etc/resolv.conf
+        mv /etc/resolv.conf.org /etc/resolv.conf
+    fi
 }
 
 consul::start-bootstrap () {
@@ -101,7 +138,7 @@ consul::start-bootstrap () {
     -recursor=$kon_nameserver \
     -datacenter="$(config::get_dc)" \
     -encrypt=$KON_CONSUL_ENCRYPTION_KEY \
-    -bootstrap-expect=1
+    -bootstrap-expect=1 > $(common::dev_null) 2>&1
 
     consul::enable-consul-dns
 }
@@ -149,7 +186,7 @@ consul::start () {
     -recursor=$kon_nameserver \
     -retry-join=$KON_BOOTSTRAP_SERVER \
     -datacenter="$(config::get_dc)" \
-    -encrypt=$KON_CONSUL_ENCRYPTION_KEY
+    -encrypt=$KON_CONSUL_ENCRYPTION_KEY > $(common::dev_null) 2>&1
 
     consul::enable-consul-dns
 }
@@ -171,7 +208,7 @@ consul::start_dev () {
     consul:$CONSUL_VERSION agent -dev \
     -recursor=$kon_nameserver \
     -datacenter=$(config::get_dc) \
-    -encrypt=$KON_CONSUL_ENCRYPTION_KEY
+    -encrypt=$KON_CONSUL_ENCRYPTION_KEY > $(common::dev_null) 2>&1
 
     consul::enable-consul-dns   
 }
@@ -201,7 +238,8 @@ consul::wait_for_started () {
         info "waiting for consul to start..."
         if [ "$(docker ps -f 'name=kon-consul' --format '{{.Names}}')" == "kon-consul" ]; then
             info "bootstrap Consul started!"
-            break;
+            consul members $(common::dev_null) 2>&1
+            if [ $? -eq 0 ]; then break; fi
         fi 
     done
 }

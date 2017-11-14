@@ -47,9 +47,14 @@ CLUSTER_CIDR={{key "kubernetes/network/pod-network-cidr"}}
 EOH
       }
 
+      artifact {
+        source = "hyperkube"
+      }
+
       config {
-        command = "/opt/bin/kube-controller-manager"
+        command = "local/hyperkube"
         args = [
+          "kube-controller-manager",
           "--kubeconfig=local/kubernetes/controller-manager.conf",
           "--root-ca-file=local/kon/pki/ca.crt",
           "--controllers=*,bootstrapsigner,tokencleaner",
