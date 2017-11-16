@@ -17,7 +17,7 @@ common::system_info () {
         x86_64)
             arch="amd64"
             ;;
-        armv8)
+        armv8|aarch64)
             arch="arm64"
             ;;
         armv7l)
