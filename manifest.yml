@@ -1,4 +1,5 @@
 image: thenatureofsoftware/kon:VERSION
+tags: ['VERSION', 'latest']
 manifests:
   -
     image: thenatureofsoftware/kon-arm:VERSION
