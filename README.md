@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/TheNatureOfSoftware/kubernetes-on-nomad.svg?branch=master)](https://travis-ci.org/TheNatureOfSoftware/kubernetes-on-nomad)
+
 # kubernetes-on-nomad
 
 ## What
