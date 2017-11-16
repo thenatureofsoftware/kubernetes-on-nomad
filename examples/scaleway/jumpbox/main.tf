@@ -1,15 +1,36 @@
-variable "name" { type = "string" }
-variable "image_id" {}
+variable "name" {
+    description = "Server name (hostname)"
+    type        = "string"
+}
+variable "image_id" {
+    description = "Server image"
+    type        = "string"
+}
 variable "type" {
-    type = "string"
-    default = "VC1M"
+    description = "Server commercial-type, C1, C2[S|M|L], X64-[2|4|8|15|30|60|120]GB, ARM64-[2|4|8]GB"
+    type        = "string"
+    default     = "VC1M"
 }
 variable "security_group_id" {
     type = "string"
     default = ""
 }
-variable "ssh_private_key_data" {}
-variable "region" {}
+variable "region" {
+    description = "Datacenter region (par1 or ams1)"
+    type        = "string"
+}
+variable "ssh_private_key_file" {
+    description = "Path to ssh private key file (.ssh/id_rsa)"
+    type        = "string"
+}
+variable "provisioner_ssh_private_key_data" {
+    description = "ssh key for provisioner connection"
+    type        = "string"
+}
+variable "local-init-script" {
+    description = "local executed provisioning script"
+    type        = "string"
+}
 
 resource "scaleway_server" "node" {
   name  = "${var.name}"
@@ -25,17 +46,17 @@ resource "scaleway_server" "node" {
   }
 
   provisioner "local-exec" {
-    command = "${path.root}/script/local-init.sh"
+    command = "${var.local-init-script}"
   }
 
   provisioner "file" {
-    source      = "${path.root}/kon_id_rsa"
+    source      = "${var.ssh_private_key_file}"
     destination = "/root/.ssh/id_rsa"
 
     connection {
         type     = "ssh"
         user     = "root"
-        private_key = "${var.ssh_private_key_data}"
+        private_key = "${var.provisioner_ssh_private_key_data}"
     }
   }
 
@@ -47,31 +68,31 @@ resource "scaleway_server" "node" {
     connection {
         type     = "ssh"
         user     = "root"
-        private_key = "${var.ssh_private_key_data}"
+        private_key = "${var.provisioner_ssh_private_key_data}"
     }
   }
 
   provisioner "file" {
-    source      = "${path.root}/script/jumpbox-provision.sh"
-    destination = "/root/jumpbox-provision.sh"
+    source      = "${path.module}/provision.sh"
+    destination = "/root/provision.sh"
 
     connection {
         type     = "ssh"
         user     = "root"
-        private_key = "${var.ssh_private_key_data}"
+        private_key = "${var.provisioner_ssh_private_key_data}"
     }
   }
 
   provisioner "remote-exec" {
     inline      = [
-        "chmod +x /root/jumpbox-provision.sh",
-        "./jumpbox-provision.sh"
+        "chmod +x /root/provision.sh",
+        "./provision.sh"
     ]
 
     connection {
         type     = "ssh"
         user     = "root"
-        private_key = "${var.ssh_private_key_data}"
+        private_key = "${var.provisioner_ssh_private_key_data}"
     }
   }
 }

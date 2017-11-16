@@ -1,18 +1,41 @@
-variable "name" { type = "string" }
-variable "image_id" {}
+variable "name" {
+    description = "Server name (hostname)"
+    type        = "string"
+}
+variable "image_id" {
+    description = "Server image"
+    type        = "string"
+}
 variable "type" {
-    type = "string"
-    default = "VC1M"
+    description = "Server commercial-type, C1, C2[S|M|L], X64-[2|4|8|15|30|60|120]GB, ARM64-[2|4|8]GB"
+    type        = "string"
+    default     = "VC1M"
 }
 variable "security_group_id" {
-    type = "string"
-    default = ""
+    description = "scaleway security group for this server"
+    type        = "string"
+    default     = ""
 }
-variable "ssh_private_key_data" {}
-variable "jumpbox" {}
-variable "jumpbox_ip" {}
-variable "tinc_ip" {}
-variable "region" {}
+variable "region" {
+    description = "Datacenter region (par1 or ams1)"
+    type        = "string"
+}
+variable "jumpbox" {
+    description = "jumpbox scaleway server ID"
+    type        = "string"
+}
+variable "jumpbox_ip" {
+    description = "jumpbox IP-address"
+    type        = "string"
+}
+variable "tinc_ip" {
+    description = "user defined IP-address in the IPv4 private address space"
+    type        = "string"
+}
+variable "ssh_public_key_file" {
+    description = "Path to ssh public key file (.ssh/id_rsa.pub)"
+    type        = "string"
+}
 
 resource "scaleway_server" "node" {
   name  = "${var.name}"
@@ -28,23 +51,19 @@ resource "scaleway_server" "node" {
   }
 
   provisioner "local-exec" {
-    command = "${path.root}/script/local-init.sh"
+    command = "sleep 10"
   }
 
   provisioner "local-exec" {
-    command = "sleep 60"
+      command = "scw --region=${var.region} cp --gateway=${var.jumpbox} ${var.ssh_public_key_file} ${scaleway_server.node.id}:/root/"
   }
 
   provisioner "local-exec" {
-      command = "scw --region=${var.region} cp --gateway=${var.jumpbox} ${path.root}/kon_id_rsa.pub ${scaleway_server.node.id}:/root/"
+      command = "scw --region=${var.region} cp --gateway=${var.jumpbox} ${path.module}/provision.sh ${scaleway_server.node.id}:/root/"
   }
 
   provisioner "local-exec" {
-      command = "scw --region=${var.region} cp --gateway=${var.jumpbox} ${path.root}/script/node-provision.sh ${scaleway_server.node.id}:/root/"
-  }
-
-  provisioner "local-exec" {
-      command = "scw --region=${var.region} exec --gateway=${var.jumpbox} ${scaleway_server.node.id} 'cat kon_id_rsa.pub >> /root/.ssh/instance_keys && cat kon_id_rsa.pub >> /root/.ssh/authorized_keys'"
+      command = "scw --region=${var.region} exec --gateway=${var.jumpbox} ${scaleway_server.node.id} 'cat id_rsa.pub >> /root/.ssh/instance_keys && cat id_rsa.pub >> /root/.ssh/authorized_keys && rm -f id_rsa.pub'"
   }
 
   provisioner "local-exec" {
@@ -56,7 +75,7 @@ resource "scaleway_server" "node" {
   }
 
   provisioner "local-exec" {
-      command = "scw --region=${var.region} exec --gateway=${var.jumpbox} ${scaleway_server.node.id} './node-provision.sh'"
+      command = "scw --region=${var.region} exec --gateway=${var.jumpbox} ${scaleway_server.node.id} './provision.sh'"
   }
 }
 
