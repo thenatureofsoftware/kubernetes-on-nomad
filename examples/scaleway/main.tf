@@ -25,11 +25,13 @@ data "scaleway_image" "docker" {
 # jump-box
 ###############################################################################
 module "jumpbox" {
-    source  = "./jumpbox"
-    name    = "jumpbox"
-    region = "${var.region}"
-    image_id   = "${data.scaleway_image.docker.id}"
-    ssh_private_key_data  = "${file("${var.ssh_key_file}")}"
+    source                              = "./jumpbox"
+    name                                = "jumpbox"
+    region                              = "${var.region}"
+    image_id                            = "${data.scaleway_image.docker.id}"
+    provisioner_ssh_private_key_data    = "${file("${var.ssh_key_file}")}"
+    ssh_private_key_file                = "${path.root}/.ssh/id_rsa"
+    local-init-script                   = "${path.root}/key-gen.sh"
 }
 
 output "jumpbox.id" {
@@ -48,9 +50,9 @@ module "node01" {
     name                  = "node01"
     region                = "${var.region}"
     image_id              = "${data.scaleway_image.docker.id}"
-    ssh_private_key_data  = "${file("${var.ssh_key_file}")}"
     jumpbox               = "${module.jumpbox.id}"
     jumpbox_ip            = "${module.jumpbox.ip}"
+    ssh_public_key_file   = "${path.root}/.ssh/id_rsa.pub"
     tinc_ip               = "192.168.1.101"
 }
 
@@ -62,9 +64,9 @@ module "node02" {
     name                  = "node02"
     region                = "${var.region}"
     image_id              = "${data.scaleway_image.docker.id}"
-    ssh_private_key_data  = "${file("${var.ssh_key_file}")}"
     jumpbox               = "${module.jumpbox.id}"
     jumpbox_ip            = "${module.jumpbox.ip}"
+    ssh_public_key_file   = "${path.root}/.ssh/id_rsa.pub"
     tinc_ip               = "192.168.1.102"
 }
 
@@ -76,9 +78,9 @@ module "node03" {
     name                  = "node03"
     region                = "${var.region}"
     image_id              = "${data.scaleway_image.docker.id}"
-    ssh_private_key_data  = "${file("${var.ssh_key_file}")}"
     jumpbox               = "${module.jumpbox.id}"
     jumpbox_ip            = "${module.jumpbox.ip}"
+    ssh_public_key_file   = "${path.root}/.ssh/id_rsa.pub"
     tinc_ip               = "192.168.1.103"
 }
 
@@ -90,9 +92,9 @@ module "node04" {
     name                  = "node04"
     region                = "${var.region}"
     image_id              = "${data.scaleway_image.docker.id}"
-    ssh_private_key_data  = "${file("${var.ssh_key_file}")}"
     jumpbox               = "${module.jumpbox.id}"
     jumpbox_ip            = "${module.jumpbox.ip}"
+    ssh_public_key_file   = "${path.root}/.ssh/id_rsa.pub"
     tinc_ip               = "192.168.1.104"
 }
 
@@ -104,9 +106,9 @@ module "node05" {
     name                  = "node05"
     region                = "${var.region}"
     image_id              = "${data.scaleway_image.docker.id}"
-    ssh_private_key_data  = "${file("${var.ssh_key_file}")}"
     jumpbox               = "${module.jumpbox.id}"
     jumpbox_ip            = "${module.jumpbox.ip}"
+    ssh_public_key_file   = "${path.root}/.ssh/id_rsa.pub"
     tinc_ip               = "192.168.1.105"
 }
 
@@ -118,9 +120,9 @@ module "node06" {
     name                  = "node06"
     region                = "${var.region}"
     image_id              = "${data.scaleway_image.docker.id}"
-    ssh_private_key_data  = "${file("${var.ssh_key_file}")}"
     jumpbox               = "${module.jumpbox.id}"
     jumpbox_ip            = "${module.jumpbox.ip}"
+    ssh_public_key_file   = "${path.root}/.ssh/id_rsa.pub"
     tinc_ip               = "192.168.1.106"
 }
 
@@ -132,9 +134,9 @@ module "node07" {
     name                  = "node07"
     region                = "${var.region}"
     image_id              = "${data.scaleway_image.docker.id}"
-    ssh_private_key_data  = "${file("${var.ssh_key_file}")}"
     jumpbox               = "${module.jumpbox.id}"
     jumpbox_ip            = "${module.jumpbox.ip}"
+    ssh_public_key_file   = "${path.root}/.ssh/id_rsa.pub"
     tinc_ip               = "192.168.1.107"
 }
 
@@ -146,9 +148,9 @@ module "node08" {
     name                  = "node08"
     region                = "${var.region}"
     image_id              = "${data.scaleway_image.docker.id}"
-    ssh_private_key_data  = "${file("${var.ssh_key_file}")}"
     jumpbox               = "${module.jumpbox.id}"
     jumpbox_ip            = "${module.jumpbox.ip}"
+    ssh_public_key_file   = "${path.root}/.ssh/id_rsa.pub"
     tinc_ip               = "192.168.1.108"
 }
 
@@ -160,9 +162,9 @@ module "node09" {
     name                  = "node09"
     region                = "${var.region}"
     image_id              = "${data.scaleway_image.docker.id}"
-    ssh_private_key_data  = "${file("${var.ssh_key_file}")}"
     jumpbox               = "${module.jumpbox.id}"
     jumpbox_ip            = "${module.jumpbox.ip}"
+    ssh_public_key_file   = "${path.root}/.ssh/id_rsa.pub"
     tinc_ip               = "192.168.1.109"
 }
 
@@ -174,9 +176,9 @@ module "node10" {
     name                  = "node10"
     region                = "${var.region}"
     image_id              = "${data.scaleway_image.docker.id}"
-    ssh_private_key_data  = "${file("${var.ssh_key_file}")}"
     jumpbox               = "${module.jumpbox.id}"
     jumpbox_ip            = "${module.jumpbox.ip}"
+    ssh_public_key_file   = "${path.root}/.ssh/id_rsa.pub"
     tinc_ip               = "192.168.1.110"
 }
 

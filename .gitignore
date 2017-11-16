@@ -16,7 +16,7 @@ setup.env
 **/*.tfstate*
 **/.terraform
 
-
 #ssh-keys
+**/.ssh
 **/*id_rsa*
 
