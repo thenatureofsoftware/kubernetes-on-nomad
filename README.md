@@ -35,6 +35,7 @@ Then login to any node and run:
 ```
 core-01 ~ # kon etcd config
 core-01 ~ # kon etcd start
+core-01 ~ # kon kubernetes install
 core-01 ~ # kon kubernetes config
 core-01 ~ # kon kubernetes start
 ```
