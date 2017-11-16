@@ -29,7 +29,7 @@ push: docker manifest-tool
 manifest-tool: manifest-tool-url
 ifeq ("$(wildcard $(WORKDIR)/manifest-tool)","")
 	@mkdir -p $(WORKDIR)
-	@curl -o $(WORKDIR)/manifest-tool -sSL $(MT_URL)
+	@wget -q -O $(WORKDIR)/manifest-tool $(MT_URL)
 	@chmod +x $(WORKDIR)/manifest-tool
 endif
 	@cat manifest.yml | sed -e 's/VERSION/$(VERSION)/g' > $(WORKDIR)/manifest.yml
