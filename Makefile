@@ -8,8 +8,9 @@ MT_VERSION := v0.7.0
 default: args docker push
 
 args:
-	@./argbash -o script/arguments.sh script/kon.m4
-	@sed -i '' -e '/assign_positional_args$$/d' -e '/parse_commandline "\$$\@"$$/d' -e '/handle_passed_args_count$$/d' script/arguments.sh
+	@mkdir -p $(WORKDIR)
+	@./argbash -o $(WORKDIR)/arguments.generated script/kon.m4
+	@cat $(WORKDIR)/arguments.generated | sed -e '/assign_positional_args$$/d' -e '/parse_commandline "\$$\@"$$/d' -e '/handle_passed_args_count$$/d' > script/arguments.sh
 
 docker: args
 	docker run --rm --privileged multiarch/qemu-user-static:register --reset

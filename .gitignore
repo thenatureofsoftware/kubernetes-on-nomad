@@ -4,6 +4,9 @@ tmp
 setup.env
 .build
 
+# generated
+script/arguments.sh
+
 **/*.img
 **/*.vmdk
 **/config.ign.merged
