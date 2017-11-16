@@ -1,0 +1,20 @@
+image: thenatureofsoftware/kon:VERSION
+manifests:
+  -
+    image: thenatureofsoftware/kon-arm:VERSION
+    tags: ['VERSION', 'latest']
+    platform:
+      architecture: arm
+      os: linux
+  -
+    image: thenatureofsoftware/kon-arm64:VERSION
+    tags: ['VERSION', 'latest']
+    platform:
+      architecture: arm64
+      os: linux
+  -
+    image: thenatureofsoftware/kon-amd64:VERSION
+    tags: ['VERSION', 'latest']
+    platform:
+      architecture: amd64
+      os: linux

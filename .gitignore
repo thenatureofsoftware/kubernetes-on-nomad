@@ -2,6 +2,7 @@
 tmp
 ./kon.conf
 setup.env
+.build
 
 **/*.img
 **/*.vmdk
