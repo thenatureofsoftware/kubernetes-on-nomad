@@ -40,11 +40,6 @@ resource "scaleway_server" "node" {
   security_group = "${var.security_group_id}"
   state = "running"
 
-  volume {
-    size_in_gb = 50
-    type       = "l_ssd"
-  }
-
   provisioner "local-exec" {
     command = "${var.local-init-script}"
   }
