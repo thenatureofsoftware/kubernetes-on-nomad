@@ -289,7 +289,7 @@ consul::put_file () {
 
 consul::generate_encryption_key () {
     if [ ! "$(common::which consul)" == "" ]; then
-        consul_encryption_key=$(consul keygen)
+        consul_encryption_key=$(thenatureofsoftware/consul:${CONSUL_VERSION} keygen)
         if [ $? -gt 0 ]; then fail "consul failed to generate encryption key"; fi
     else
         consul_encryption_key=$(docker run --rm -it thenatureofsoftware/consul:${CONSUL_VERSION} keygen)
