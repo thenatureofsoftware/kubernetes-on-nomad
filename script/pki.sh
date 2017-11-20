@@ -190,10 +190,6 @@ pki::check_key () {
     if [ ! -f $KON_PKI_DIR/$1.key ]; then fail "no $1 key"; fi
 }
 
-pki::cfssl () {
-    docker run --rm -i cfssl/cfssl $*
-}
-
 pki::ca_csr () {
     cat <<EOF
 {
