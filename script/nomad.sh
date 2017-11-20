@@ -211,6 +211,13 @@ EOF
 
 nomad::client_template () {
     cert_bundle=$(pki::generate_name "nomad" "$(common::ip_addr)")
+    KON_NOMAD_VERIFY_SERVER_HOSTNAME="true"
+    KON_NOMAD_VERIFY_HTTPS_CLIENT="true"
+    if [ "$KON_DEV" == "true" ]; then
+        KON_NOMAD_VERIFY_SERVER_HOSTNAME="false"
+        KON_NOMAD_VERIFY_HTTPS_CLIENT="false"
+    fi
+
     cat <<EOF > "$1"
 
 data_dir = "/var/lib/nomad"
@@ -249,8 +256,8 @@ tls {
   ca_file = "${KON_PKI_DIR}/ca.crt"
   cert_file = "${KON_PKI_DIR}/${cert_bundle}.crt"
   key_file = "${KON_PKI_DIR}/${cert_bundle}.key"
-  verify_server_hostname = true
-  verify_https_client    = true
+  verify_server_hostname = ${KON_NOMAD_VERIFY_SERVER_HOSTNAME}
+  verify_https_client    = ${KON_NOMAD_VERIFY_HTTPS_CLIENT}
 }
 EOF
 }

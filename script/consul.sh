@@ -4,28 +4,14 @@
 # Installs Consul
 ###############################################################################
 consul::install () {
-
     if [ $(common::which consul) ]; then
         info "Consul already installed $(consul version)"
         return 0
+    else
+        local c=$(docker create thenatureofsoftware/consul:${CONSUL_VERSION})
+        docker cp $c:/bin/consul  ${BINDIR}
+        docker rm $c
     fi
-
-    tmpdir=$(mktemp -d kon.XXXXXX)
-    download_file=$tmpdir/consul.zip
-    curl -o $download_file -sS $(consul::download_url)
-    if [ $? -gt 0 ]; then fail "failed to download consul ${CONSUL_VERSION}"; fi
-    unzip -qq -o -d ${BINDIR} $download_file
-    rm -rf $tmpdir
-    ${BINDIR}/consul version > "$(common::dev_null)" 2>&1
-
-    if [ $? -gt 0 ]; then fail "Consul install failed!"; fi
-}
-
-consul::download_url () {
-    sys_info=$(common::system_info)
-    os=$(echo $sys_info|jq -r  .os)
-    arch=$(echo $sys_info|jq -r  .arch)
-    echo "https://releases.hashicorp.com/consul/${CONSUL_VERSION}/consul_${CONSUL_VERSION}_${os}_${arch}.zip"
 }
 
 consul::bind_interface () {
@@ -133,7 +119,7 @@ consul::start-bootstrap () {
     -e 'CONSUL_ALLOW_PRIVILEGED_PORTS=true' \
     -e 'CONSUL_CLIENT_INTERFACE=lo' \
     -e "CONSUL_BIND_INTERFACE=$CONSUL_BIND_INTERFACE" \
-    consul:$CONSUL_VERSION agent -server \
+    thenatureofsoftware/consul:$CONSUL_VERSION agent -server \
     -dns-port=53 \
     -recursor=$kon_nameserver \
     -datacenter="$(config::get_dc)" \
@@ -181,7 +167,7 @@ consul::start () {
     -e 'CONSUL_ALLOW_PRIVILEGED_PORTS=true' \
     -e 'CONSUL_CLIENT_INTERFACE=lo' \
     -e "CONSUL_BIND_INTERFACE=$CONSUL_BIND_INTERFACE" \
-    consul:$CONSUL_VERSION $agent_type \
+    thenatureofsoftware/consul:$CONSUL_VERSION $agent_type \
     -dns-port=53 \
     -recursor=$kon_nameserver \
     -retry-join=$KON_BOOTSTRAP_SERVER \
@@ -205,7 +191,7 @@ consul::start_dev () {
     -e 'CONSUL_ALLOW_PRIVILEGED_PORTS=true' \
     -e 'CONSUL_CLIENT_INTERFACE=lo' \
     -e "CONSUL_BIND_INTERFACE=$CONSUL_BIND_INTERFACE" \
-    consul:$CONSUL_VERSION agent -dev \
+    thenatureofsoftware/consul:$CONSUL_VERSION agent -dev \
     -recursor=$kon_nameserver \
     -datacenter=$(config::get_dc) \
     -encrypt=$KON_CONSUL_ENCRYPTION_KEY > $(common::dev_null) 2>&1
