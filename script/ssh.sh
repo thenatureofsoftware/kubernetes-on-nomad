@@ -34,8 +34,10 @@ ssh::copy () {
     nomad_files=""
     if [ "$nomad_cert_bundle_name" == "client.$region.nomad" ]; then
         nomad_files="client.$region.nomad.*"
-    else
+    elif [ -f "client.$region.nomad.crt" ]; then
         nomad_files="client.$region.nomad.* server.$region.nomad.*"
+    else
+        nomad_files="server.$region.nomad.*"
     fi
 
     (

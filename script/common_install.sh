@@ -20,8 +20,12 @@ common_install::cfssl () {
     echo "Install for $os $arch"
 
     if [ ! -d "$KON_BIN_DIR" ]; then fail "$KON_BIN_DIR no such directory"; return 1; fi
-    sudo curl -sSL -o $KON_BIN_DIR/cfssl https://pkg.cfssl.org/R1.2/cfssl_$os-$arch
-    sudo chmod a+x $KON_BIN_DIR/cfssl
+    if [ "$arch" == "arm64" ] || [ "$arch" == "arm" ]; then
+        curl -sSL -o $KON_BIN_DIR/cfssl https://pkg.cfssl.org/R1.2/cfssl_$os-arm
+    else
+        curl -sSL -o $KON_BIN_DIR/cfssl https://pkg.cfssl.org/R1.2/cfssl_$os-$arch
+    fi
+    chmod +x $KON_BIN_DIR/cfssl
 }
 
 ###############################################################################
