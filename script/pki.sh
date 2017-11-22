@@ -1,11 +1,5 @@
 #!/bin/bash
 
-pki::install () {
-    wget --quiet -O cfssl https://pkg.cfssl.org/R1.2/cfssl_linux-amd64
-    chmod a+x cfssl
-    mv cfssl $BINDIR
-}
-
 pki::generate_ca () {
     if [ ! $(common::which cfssl) ]; then fail "cfssl not found, please install it"; fi
     if [ "$KON_PKI_DIR" == "" ]; then fail "KON_PKI_DIR is not set, is KON_CONFIG loaded?"; fi
@@ -13,7 +7,7 @@ pki::generate_ca () {
     if [ -f "$KON_PKI_DIR/ca.crt" ]; then
         info "CA certificate already present, nothing to do";
     else
-        ca_json=$(pki::ca_csr | cfssl -loglevel 5 genkey -initca -)
+        ca_json=$(pki::ca_csr | cfssl genkey -initca -)
         echo $ca_json | jq -r .csr > $KON_PKI_DIR/ca.csr
         echo $ca_json | jq -r .cert > $KON_PKI_DIR/ca.crt
         echo $ca_json | jq -r .key > $KON_PKI_DIR/ca.key
@@ -53,7 +47,7 @@ pki::generate_cert () {
         info "certificate and key already generated for $cert_bundle_name, moving on"
     else
         info "generating certificate and key  for $cert_bundle_name"
-        cert_json=$(pki::generate_csr $cert_bundle_name | cfssl -loglevel 5 gencert -ca=$KON_PKI_DIR/ca.crt -config=$KON_PKI_DIR/cfssl.json -profile=kon -ca-key=$KON_PKI_DIR/ca.key -hostname="$cert_bundle_name,localhost,127.0.0.1" -)
+        cert_json=$(pki::generate_csr $cert_bundle_name | cfssl gencert -ca=$KON_PKI_DIR/ca.crt -config=$KON_PKI_DIR/cfssl.json -profile=kon -ca-key=$KON_PKI_DIR/ca.key -hostname="$cert_bundle_name,localhost,127.0.0.1" -)
         echo $cert_json | jq -r .csr > $KON_PKI_DIR/$cert_bundle_name.csr
         echo $cert_json | jq -r .cert > $KON_PKI_DIR/$cert_bundle_name.crt
         echo $cert_json | jq -r .key > $KON_PKI_DIR/$cert_bundle_name.key
@@ -75,7 +69,7 @@ pki::generate_certificate () {
         info "certificate and key already generated for $cert_bundle_name, moving on"
     else
         info "generating certificate and key  for $cert_bundle_name and hosts [$hosts]"
-        cert_json=$(pki::generate_csr $cert_bundle_name | cfssl -loglevel 5 gencert -ca=$KON_PKI_DIR/ca.crt -config=$KON_PKI_DIR/cfssl.json -profile=kon -ca-key=$KON_PKI_DIR/ca.key -hostname="$hosts" -)
+        cert_json=$(pki::generate_csr $cert_bundle_name | cfssl gencert -ca=$KON_PKI_DIR/ca.crt -config=$KON_PKI_DIR/cfssl.json -profile=kon -ca-key=$KON_PKI_DIR/ca.key -hostname="$hosts" -)
         echo $cert_json | jq -r .csr > $KON_PKI_DIR/$cert_bundle_name.csr
         echo $cert_json | jq -r .cert > $KON_PKI_DIR/$cert_bundle_name.crt
         echo $cert_json | jq -r .key > $KON_PKI_DIR/$cert_bundle_name.key
@@ -110,7 +104,7 @@ pki::generate_etcd_service_cert() {
     pki::check_ca
     pki::generate_cfssl_config
     info "generating etcd service certificates"
-    cert_json=$(echo {} | $KON_BIN_DIR/cfssl -loglevel 5 gencert -ca=$KON_PKI_DIR/ca.crt -config=$KON_PKI_DIR/cfssl.json -profile=kon -ca-key=$KON_PKI_DIR/ca.key -hostname="etcd.service.consul" -)
+    cert_json=$(echo {} | $KON_BIN_DIR/cfssl gencert -ca=$KON_PKI_DIR/ca.crt -config=$KON_PKI_DIR/cfssl.json -profile=kon -ca-key=$KON_PKI_DIR/ca.key -hostname="etcd.service.consul" -)
     echo $cert_json | jq -r .csr > $KON_PKI_DIR/etcd.service.consul.csr
     echo $cert_json | jq -r .cert > $KON_PKI_DIR/etcd.service.consul.crt
     echo $cert_json | jq -r .key > $KON_PKI_DIR/etcd.service.consul.key

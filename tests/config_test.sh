@@ -88,19 +88,19 @@ test::config::configure_job () {
 
     actula_region=$(cat $TESTDIR/../nomad/job/etcd.nomad | config::configure_job swe | sed '2q;d' | sed 's/ //g')
     actula_dc=$(cat $TESTDIR/../nomad/job/etcd.nomad | config::configure_job swe | sed '3q;d' | sed 's/ //g')
-    assert "test::config::configure_job" "$actula_region" "region=\"swe\""
-    assert "test::config::configure_job" "$actula_dc" "datacenters=[\"east\",\"west\",\"north\"]"
+    assert "config::configure_job" "$actula_region" "region=\"swe\""
+    assert "configure_job" "$actula_dc" "datacenters=[\"east\",\"west\",\"north\"]"
 }
 
 test::config::node_all () {
     source $SCRIPTDIR/common.sh
     source $SCRIPTDIR/config.sh
 
-    assert "test::config::node_region" "$(config::node_region "swe:east:node1:192.168.100.101")" "swe"
-    assert "test::config::node_dc" "$(config::node_dc "swe:east:node1:192.168.100.101")" "east"
-    assert "test::config::node_hostname" "$(config::node_hostname "swe:east:node1:192.168.100.101")" "node1"
-    assert "test::config::node_ip" "$(config::node_ip "swe:east:node1:192.168.100.101")" "192.168.100.101"
-    assert "test::config::node_meta" "$(config::node_meta "swe:east:node1:192.168.100.101")" "node1:swe:east"
+    assert "node_region" "$(config::node_region "swe:east:node1:192.168.100.101")" "swe"
+    assert "node_dc" "$(config::node_dc "swe:east:node1:192.168.100.101")" "east"
+    assert "node_hostname" "$(config::node_hostname "swe:east:node1:192.168.100.101")" "node1"
+    assert "node_ip" "$(config::node_ip "swe:east:node1:192.168.100.101")" "192.168.100.101"
+    assert "node_meta" "$(config::node_meta "swe:east:node1:192.168.100.101")" "node1:swe:east"
 }
 
 

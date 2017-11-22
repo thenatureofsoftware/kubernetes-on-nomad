@@ -41,19 +41,32 @@ kubernetes::install_by_download () {
 # Installs CNI binaries
 ###############################################################################
 kubernetes::cni_url () {
-    if [ ! "$CNI_VERSION" ]; then fail "CNI_VERSION is not set, is KON_CONFIG loaded?"; fi
-    local sys_info=$(common::system_info)
-    local arch=$(echo $sys_info|jq -r  .arch)
-    echo "https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-${arch}-$CNI_VERSION.tgz"
+    arch=$(common::system_info|jq -r .arch)
+    echo "https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-$arch-$CNI_VERSION.tgz"
 }
 
 kubernetes::cni_install () {
     if [ ! -f "/opt/cni/bin/loopback" ]; then
-        info "installing cni plugins..."
+        if [ ! "$CNI_VERSION" ]; then fail "CNI_VERSION is not set, is KON_CONFIG loaded?"; fi
+        info "installing cni plugins $CNI_VERSION ..."
         mkdir -p /opt/cni/bin
-        curl -sL $(kubernetes::cni_url) | tar zxv -C /opt/cni/bin > "$(common::dev_null)" 2>&1
-        common::fail_on_error "failed to install cni plugins"
-        info "cni plugins installed"
+        local counter=0
+        while true; do
+            counter=$((counter + 1));
+            if [ $counter -gt 10 ]; then
+                error "giving up trying to install cni plugins"
+                fail "failed to install cni plugins"
+                break
+            fi
+            curl -sSL $(kubernetes::cni_url) | tar zxv -C /opt/cni/bin > "$(common::dev_null)" 2>&1
+            if [ $? -eq 0 ]; then
+                info "cni plugins installed"
+                break
+            else
+                warn "failed to get cni binaries from $(kubernetes::cni_url), will try again in $counter sec"
+                sleep $counter
+            fi
+        done
     else
         info "cni plugins already installed"
     fi
@@ -72,6 +85,7 @@ kubernetes::download_and_install() {
     if [ ! -f "$K8S_BIN_DIR/$component" ]; then
         info "downloading and installing: $component version: $2"
         curl -o $K8S_BIN_DIR/$component -sS $(kubernetes::download_url $component $2)
+        if [ $? -gt 0 ]; then fail "download of $1 from $(kubernetes::download_url $component $2) failed!"; fi
         chmod +x $K8S_BIN_DIR/$component
     fi
     rm -f $BINDIR/$component
@@ -87,7 +101,7 @@ kubernetes::download_url () {
     sys_info=$(common::system_info)
     os=$(echo $sys_info|jq -r  .os)
     arch=$(echo $sys_info|jq -r  .arch)
-    echo "https://storage.googleapis.com/kubernetes-release/release/$2/bin/${os}/${arch}/$1"
+    echo "https://storage.googleapis.com/kubernetes-release/release/$2/bin/linux/${arch}/$1"
 }
 
 ###############################################################################

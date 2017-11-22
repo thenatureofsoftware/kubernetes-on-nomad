@@ -43,7 +43,7 @@ EOF
       }
       #NODE_STATUS={{printf "kubernetes/nodes/%s" (env "attr.unique.hostname") | key}}
       config {
-        image = "gcr.io/google_containers/etcd-amd64:3.0.17"
+        image = "gcr.io/google_containers/etcd-arch:3.1.10"
         network_mode = "host"
 
         volumes = [

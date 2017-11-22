@@ -169,9 +169,9 @@ Vagrant.configure("2") do |config|
 
       config.vm.provision "shell", inline: <<-SHELL
       sudo mkdir -p /etc/kon \
-      && sudo cp /kon-dev/kon.conf /etc/kon/ \
+      && sudo cp /kon/dev/kon.conf /etc/kon/ \
       && sudo mkdir -p /opt/bin \
-      && sudo cp /kon-src/kon /opt/bin/
+      && sudo cp /kon/src/kon /opt/bin/
       SHELL
 
     end

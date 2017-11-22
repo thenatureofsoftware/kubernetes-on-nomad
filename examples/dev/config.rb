@@ -75,4 +75,4 @@ $vm_cpus = 2
 # or, to map host folders to guest folders of the same name,
 # $shared_folders = Hash[*['/home/foo/app1', '/home/foo/app2'].map{|d| [d, d]}.flatten]
 $current_dir = File.dirname(__FILE__)
-$shared_folders = {$current_dir + '/../../' => '/kon-src', $current_dir => '/kon-dev',}
+$shared_folders = {$current_dir + '/../../' => '/kon/src', $current_dir => '/kon/dev',}
