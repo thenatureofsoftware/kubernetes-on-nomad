@@ -9,7 +9,11 @@ common::system_info () {
         os=$(echo $_test_|awk '{print tolower($1)}')
         arch=$(echo $_test_|awk '{print tolower($2)}')
     else
-        os=$(uname | awk '{print tolower($0)}')
+        if [ -f "/etc/os-release" ]; then
+            os=$(source /etc/os-release; echo $ID)
+        else
+            os=$(uname | awk '{print tolower($0)}')
+        fi
         arch=$(uname -m | awk '{print tolower($0)}')
     fi
 
