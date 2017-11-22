@@ -51,7 +51,7 @@ resource "scaleway_server" "node" {
   }
 
   provisioner "local-exec" {
-    command = "sleep 30"
+    command = "sleep 60"
   }
 
   provisioner "local-exec" {
