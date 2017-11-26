@@ -21,30 +21,43 @@ etcd::config () {
 
     pki::generate_etcd_service_cert
     
-    if [ "$ETCD_SERVERS" == "" ]; then
-        error "ETCD_SERVERS is not set"
-        exit 1
-    fi
-
-    if [ "$ETCD_INITIAL_CLUSTER" == "" ]; then
-        error "ETCD_INITIAL_CLUSTER is not set"
-        exit 1
-    fi
-
-    if [ "$ETCD_INITIAL_CLUSTER_TOKEN" == "" ]; then
-        error "ETCD_INITIAL_CLUSTER_TOKEN is not set"
+    if [ "$KON_ETCD_SERVERS" == "" ]; then
+        error "KON_ETCD_SERVERS is not set"
         exit 1
     fi
 
     # Put etcd configuration in Consul.
-    consul::put $etcdServersKey "$ETCD_SERVERS"
-    consul::put $etcdInitialClusterKey "$ETCD_INITIAL_CLUSTER"
+    consul::put $etcdServersKey "$(etcd::get_etcd_servers)"
+    consul::put $etcdInitialClusterKey "$(etcd::get_etcd_initial_cluster)"
     consul::put $etcdInitialClusterTokenKey "$ETCD_INITIAL_CLUSTER_TOKEN"
 
     currentState=$(consul::get $etcdStateKey)
     if [ ! "$currentState" == $STARTED ] && [ ! "$currentState" == $RUNNING ]; then
         consul::put $etcdStateKey $CONFIGURED
     fi
+}
+
+###############################################################################
+# Returns etcd servers 
+###############################################################################
+etcd::get_etcd_servers () {
+    etcd_servers=()
+    for ip in ${!config_etcd_servers[@]}; do
+        etcd_servers+=(https://$ip:2379)
+    done
+    echo $(common::join_by , ${etcd_servers[@]})
+}
+
+###############################################################################
+# Returns etcd initial cluster 
+###############################################################################
+etcd::get_etcd_initial_cluster () {
+    etcd_servers=()
+    for ip in ${!config_etcd_servers[@]}; do
+        host=$(config::get_host $ip)
+        etcd_servers+=($host=https://$ip:2380)
+    done
+    echo $(common::join_by , ${etcd_servers[@]})
 }
 
 ###############################################################################

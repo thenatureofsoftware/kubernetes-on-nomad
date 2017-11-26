@@ -20,13 +20,11 @@ common_install::cfssl () {
     echo "Install for $os $arch"
 
     if [ ! -d "$KON_BIN_DIR" ]; then fail "$KON_BIN_DIR no such directory"; return 1; fi
-    if [ "$arch" == "arm64" ] || [ "$arch" == "arm" ]; then
-        cfssl_container=$(docker create --name=cfssl thenatureofsoftware/cfssl:latest)
-        docker cp $cfssl_container:/usr/bin/cfssl $KON_BIN_DIR
-        docker rm $cfssl_container
-    else
-        curl -sSL -o $KON_BIN_DIR/cfssl https://pkg.cfssl.org/R1.2/cfssl_$os-$arch
-    fi
+
+    cfssl_container=$(docker create --name=cfssl thenatureofsoftware/cfssl:latest)
+    docker cp $cfssl_container:/usr/bin/cfssl $KON_BIN_DIR
+    docker rm $cfssl_container
+
     chmod +x $KON_BIN_DIR/cfssl
 }
 

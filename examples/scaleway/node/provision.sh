@@ -2,6 +2,8 @@
 
 echo 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/bin"' > /etc/environment
 
+uname -a > ~/uname.out
+
 apt-get update
 apt-get install -y unzip jq dnsutils
 

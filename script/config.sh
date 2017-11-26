@@ -6,7 +6,9 @@ declare -A config_nodes
 declare -A config_regions
 # config_minions[<IP-address]=<hostname>
 declare -A config_servers
+declare -A config_etcd_servers
 declare -A config_minions
+
 config_bootstrap_server=""
 
 ###############################################################################
@@ -109,6 +111,16 @@ config::nodes () {
 
   config::bootstrap_server
 
+  IFS=$' '
+  read -r -a servers <<< "$(echo $KON_ETCD_SERVERS | sed 's/ //g' | sed 's/,/ /g')"
+  
+  for server in ${servers[@]}; do
+    local ip_address="$(config::node_ip $server)"
+    local meta_info="$(config::node_meta $server)"
+    config_nodes[$ip_address]=$meta_info
+    config_etcd_servers[$ip_address]=$meta_info
+  done
+  
   if [ "$KON_MINIONS" == "" ]; then fail "KON_MINIONS is empty, is KON_CONFIG loaded?"; fi
 
   IFS=$' '
@@ -180,7 +192,11 @@ function config::datacenters () {
 # stdin nomad job cat <nomad job> | config:configure_job swe | nomad run -
 ###############################################################################
 function config::configure_job () {
-  sed -e 's/"global"/"'"$1"'"/' -e 's/"dc1"/"'"$(config::datacenters $1)"'"/' -e 's;"hyperkube";"'"$(consul::get $kubernetesHyperkubeUrl)"'";' -e 's;"cni";"'"$(consul::get $kubernetesCniUrl)"'";'
+  sed -e 's/"global"/"'"$1"'"/' \
+  -e 's/"dc1"/"'"$(config::datacenters $1)"'"/' \
+  -e 's;"hyperkube";"'"$(consul::get $kubernetesHyperkubeUrl)"'";' \
+  -e 's;"cni";"'"$(consul::get $kubernetesCniUrl)"'";' \
+  -e "s/-arch:/-$(common::system_info | jq -r  .arch):/g"
 }
 
 ###############################################################################
@@ -347,14 +363,10 @@ KON_BIND_INTERFACE=enp0s8
 KON_SERVERS=swe:east:core-01:172.17.4.101,swe:west:core-02:172.17.4.102,swe:north:core-03:172.17.4.103
 
 ###############################################################################
-# List of comma separated addresses <scheme>://<ip>:<port>
+# List of etcd servers, can NOT be a server in KON_SERVERS.
+# <region>:<datacenter>:<hostname>:<ip addr>
 ###############################################################################
-ETCD_SERVERS=http://etcd.service.dc1.consul:2379
-
-###############################################################################
-# List of etcd initial cluster <name>=<scheme>://<ip>:<port>
-###############################################################################
-ETCD_INITIAL_CLUSTER=default=http://127.0.0.1:2380
+KON_ETCD_SERVERS=swe:east:core-01:172.17.4.101
 
 ###############################################################################
 # Etcd initial cluster token

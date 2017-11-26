@@ -63,7 +63,7 @@ ssh::copy () {
 ssh::install_kon () {
     if [ "$KON_DEV" == "true" ]; then
         $(ssh::cmd) << EOF
-sudo /kon-dev/update-all.sh \
+sudo /kon/dev/update-all.sh \
 && sudo mkdir -p /etc/kon/pki \
 && sudo tar zxf ~/pki.tgz -C /etc/kon/pki/
 EOF

@@ -30,11 +30,7 @@ common::system_info () {
         *)
     esac
 
-    echo $(jq -M -c \
-    --arg os 'os' --arg os_val "$os" \
-    --arg arch 'arch' --arg arch_val "$arch" \
-    '. | .[$os]=$os_val | .[$arch]=$arch_val' \
-    <<<'{}')
+    echo $(echo "{}" | jq -M -c --arg os 'os' --arg os_val "$os" --arg arch 'arch' --arg arch_val "$arch" '. | .[$os]=$os_val | .[$arch]=$arch_val')
 }
 
 log () {

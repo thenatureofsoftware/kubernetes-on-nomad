@@ -34,7 +34,7 @@ nomad::download_url () {
     sys_info=$(common::system_info)
     os=$(echo $sys_info|jq -r  .os)
     arch=$(echo $sys_info|jq -r  .arch)
-    echo "https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_${os}_${arch}.zip"
+    echo "https://releases.hashicorp.com/nomad/${NOMAD_VERSION}/nomad_${NOMAD_VERSION}_linux_${arch}.zip"
 }
 
 nomad::start () {
@@ -59,6 +59,7 @@ nomad::deploy_service_unit () {
     info "installing nomad service for os $(common::os) ..."
 
     nomad_service_unit_file=$(nomad::resolve_nomad_service_unit_file)
+    if [ "$nomad_service_unit_file" == "" ]; then fail "failed to resolve location of nomad service unit file"; fi
     nomad_advertise_ip=$(common::ip_addr)
 
     if [ "$KON_DEV" == "true" ]; then
@@ -130,7 +131,7 @@ nomad::servers_config () {
 nomad::client_config () {
     # node_class variable
     node_class=()
-    if [ ! -n "$ETCD_INITIAL_CLUSTER" ]; then fail "ETCD_INITIAL_CLUSTER is not set, is KON_CONFIG loaded?"; fi
+    if [ ! -n "$KON_ETCD_SERVERS" ]; then fail "KON_ETCD_SERVERS is not set, is KON_CONFIG loaded?"; fi
     if [ ! -n "$KON_MINIONS" ]; then fail "KON_MINIONS is not set, is KON_CONFIG loaded?"; fi
 
     # Resolve ip-address
@@ -142,7 +143,7 @@ nomad::client_config () {
     info "configuring Nomad client for IP $nomad_advertise_ip"
 
     # Check if this is an etcd node
-    if [ -n "$(echo $ETCD_INITIAL_CLUSTER | grep $nomad_advertise_ip)" ]; then
+    if [ -n "$(echo $KON_ETCD_SERVERS | grep $nomad_advertise_ip)" ]; then
         node_class+=('etcd')
     fi
 
@@ -237,6 +238,7 @@ client {
   node_class = "${3}"
   no_host_uuid = false
   $KON_NETWORK_SPEED
+  $KON_CPU_TOTAL_COMPUTE
 
   options = {
     "driver.raw_exec.enable" = "1"

@@ -26,7 +26,7 @@ EOF
       }
 
       config {
-        image = "gcr.io/google_containers/kube-proxy-amd64:${K8S_VERSION}"
+        image = "gcr.io/google_containers/kube-proxy-arch:${K8S_VERSION}"
         network_mode = "host"
         privileged = true
         
